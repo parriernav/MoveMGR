@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "MoveMgr",
-  "version": "0.0.20",
+  "version": "0.0.21",
   "identifier": "com.movemgr.desktop",
   "build": {
     "beforeDevCommand": "pnpm dev",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "MoveMgr ver.0.0.20",
+        "title": "MoveMgr ver.0.0.21",
         "width": 1180,
         "height": 780,
         "minWidth": 900,
@@ -35,8 +35,8 @@
       "icons/icon.ico",
       "icons/icon.icns"
     ],
-    "shortDescription": "규칙 기반 파일 이동 관리자",
-    "longDescription": "소스 폴더의 파일을 저장한 규칙에 따라 Windows와 macOS에서 안전하게 분류하고 이동합니다.",
+    "shortDescription": "Rule-based file organizer",
+    "longDescription": "Safely sort and move files from source folders on Windows and macOS with reusable rules.",
     "macOS": {
       "minimumSystemVersion": "13.0"
     }

@@ -5,16 +5,16 @@
   "exportedAt": "2026-09-29T00:00:00Z",
   "preferences": {
     "theme": "system",
-    "language": "ko",
+    "language": "en",
     "previewBeforeRun": true
   },
   "projects": [
     {
       "id": "802e230b-799f-442c-90b6-5ed4c54b7b28",
-      "name": "거래처 문서 정리",
+      "name": "Client document sorting",
       "checked": true,
       "source": {
-        "root": "C:/Users/Example/Downloads/문서",
+        "root": "C:/Users/Example/Downloads/Documents",
         "recursive": false,
         "includeHidden": false,
         "extensions": {
@@ -37,7 +37,7 @@
         "normalization": "NFC"
       },
       "target": {
-        "root": "D:/보관/거래처",
+        "root": "D:/Archive/Clients",
         "destination": {
           "mode": "matchSubfolder",
           "searchBase": "",
