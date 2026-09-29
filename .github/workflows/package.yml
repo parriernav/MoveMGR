@@ -1,0 +1,44 @@
+name: Package portable apps
+on:
+  workflow_dispatch:
+  push:
+    tags: ["app-v*"]
+
+jobs:
+  windows-portable:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 11.19.0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm }
+      - uses: dtolnay/rust-toolchain@stable
+      - run: pnpm install --frozen-lockfile
+      - run: node scripts/prepare-build.mjs
+      - run: pnpm version:check
+      - run: pnpm portable:build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MoveMgr-windows-portable
+          path: artifacts/portable/**
+
+  macos-portable:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 11.19.0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm }
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - run: pnpm install --frozen-lockfile
+      - run: node scripts/prepare-build.mjs
+      - run: pnpm version:check
+      - run: pnpm tauri build --target universal-apple-darwin --bundles app
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MoveMgr-macos-portable
+          path: src-tauri/target/universal-apple-darwin/release/bundle/macos/MoveMgr.app

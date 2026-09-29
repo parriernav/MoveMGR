@@ -1,0 +1,52 @@
+{
+  "format": "movemgr-settings",
+  "schemaVersion": 1,
+  "exportedByAppVersion": "0.0.1",
+  "exportedAt": "2026-09-29T00:00:00Z",
+  "preferences": {
+    "theme": "system",
+    "language": "ko",
+    "previewBeforeRun": true
+  },
+  "projects": [
+    {
+      "id": "802e230b-799f-442c-90b6-5ed4c54b7b28",
+      "name": "거래처 문서 정리",
+      "checked": true,
+      "source": {
+        "root": "C:/Users/Example/Downloads/문서",
+        "recursive": false,
+        "includeHidden": false,
+        "extensions": {
+          "mode": "only",
+          "values": ["pdf", "docx", "xlsx"],
+          "includeExtensionless": false
+        },
+        "nameFilters": []
+      },
+      "key": {
+        "extractor": {
+          "kind": "beforeDelimiter",
+          "delimiter": "_",
+          "missing": "skip"
+        },
+        "trim": true
+      },
+      "comparisonOptions": {
+        "ignoreCase": true,
+        "normalization": "NFC"
+      },
+      "target": {
+        "root": "D:/보관/거래처",
+        "destination": {
+          "mode": "matchSubfolder",
+          "searchBase": "",
+          "folderExtractor": { "kind": "whole" },
+          "comparison": { "kind": "equals" },
+          "noMatch": "skip"
+        }
+      },
+      "conflict": "skip"
+    }
+  ]
+}
