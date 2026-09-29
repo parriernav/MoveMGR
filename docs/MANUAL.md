@@ -8,4 +8,4 @@ MoveMgr organizes files from source folders into target folders with reusable pr
 4. Use **Preview** to check the planned moves. Files are not changed until you start the move.
 5. Export your settings when you want a portable backup.
 
-If MoveMgr makes your file chores a little less annoying, please give the project a GitHub star. It would make this tiny organizer very happy ★
+If MoveMgr makes your file chores a little less annoying, please [give the project a GitHub star](https://github.com/parriernav/MoveMGR). It would make this tiny organizer very happy ★

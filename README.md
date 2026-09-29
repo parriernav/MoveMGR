@@ -50,4 +50,4 @@ pnpm version:check
 - [Implementation handoff](docs/IMPLEMENTATION_HANDOFF.md)
 - [Settings example](docs/examples/settings-export.json)
 
-If MoveMgr makes your file chores a little less annoying, please give the project a GitHub star. It would make this tiny organizer very happy ★
+If MoveMgr makes your file chores a little less annoying, please [give the project a GitHub star](https://github.com/parriernav/MoveMGR). It would make this tiny organizer very happy ★

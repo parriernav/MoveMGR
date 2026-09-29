@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import { open, save } from '@tauri-apps/plugin-dialog';
+  import { openUrl } from '@tauri-apps/plugin-opener';
   import { cloneProject, emptyState, newProject } from './lib/defaults';
   import { projectFolderDialogOptions } from './lib/folder-dialog';
   import { languageOptions, localeForLanguage, reasonMessageKeys, translate, type Language, type MessageKey, type MessageVariables } from './lib/i18n';
@@ -30,6 +31,7 @@
   let history: RunResult[] | null = null;
   let dialog: 'sourceRules' | 'targetRules' | 'plan' | 'history' | 'settings' | 'manual' | null = null;
 
+  const projectUrl = 'https://github.com/parriernav/MoveMGR';
   const t = (key: MessageKey, variables?: MessageVariables) => translate(state.preferences.language, key, variables);
 
   const checkedCount = () => state.projects.filter((project) => project.checked).length;
@@ -89,6 +91,18 @@
   function showError(cause: unknown) {
     error = typeof cause === 'string' ? cause : cause instanceof Error ? cause.message : JSON.stringify(cause);
     message = '';
+  }
+
+  async function openProjectPage() {
+    try {
+      if (api.isTauri()) {
+        await openUrl(projectUrl);
+      } else {
+        window.open(projectUrl, '_blank', 'noopener,noreferrer');
+      }
+    } catch (cause) {
+      showError(cause);
+    }
   }
 
   async function persist(next: LocalState) {
@@ -636,5 +650,5 @@
 {/if}
 
 {#if dialog === 'manual'}
-  <div class="modal-backdrop" role="presentation" onclick={(event) => event.target === event.currentTarget && (dialog = null)}><div class="modal manual-modal" role="dialog" aria-modal="true" aria-labelledby="manual-title"><header class="modal-header"><div><span class="eyebrow">QUICK START</span><h2 id="manual-title">MoveMgr Manual</h2></div><button class="close" aria-label="Close" onclick={() => (dialog = null)}>×</button></header><div class="manual-body"><p>MoveMgr organizes files from source folders into target folders using reusable project rules.</p><ol><li>Add a project, then choose its source and target folders.</li><li>Set source rules to filter extensions, names, subfolders, and hidden files.</li><li>Set target rules to extract a key from each filename and choose the destination strategy.</li><li>Use Preview to review every planned move. Nothing changes until you start the move.</li><li>Export your settings if you want a portable backup.</li></ol><p class="manual-note">If MoveMgr makes your file chores a little less annoying, please give the project a GitHub star. It would make this tiny organizer very happy ★</p></div><footer class="modal-actions"><button onclick={() => (dialog = null)}>Close</button></footer></div></div>
+  <div class="modal-backdrop" role="presentation" onclick={(event) => event.target === event.currentTarget && (dialog = null)}><div class="modal manual-modal" role="dialog" aria-modal="true" aria-labelledby="manual-title"><header class="modal-header"><div><span class="eyebrow">QUICK START</span><h2 id="manual-title">MoveMgr Manual</h2></div><button class="close" aria-label="Close" onclick={() => (dialog = null)}>×</button></header><div class="manual-body"><p>MoveMgr organizes files from source folders into target folders using reusable project rules.</p><ol><li>Add a project, then choose its source and target folders.</li><li>Set source rules to filter extensions, names, subfolders, and hidden files.</li><li>Set target rules to extract a key from each filename and choose the destination strategy.</li><li>Use Preview to review every planned move. Nothing changes until you start the move.</li><li>Export your settings if you want a portable backup.</li></ol><div class="manual-note"><p>If MoveMgr makes your file chores a little less annoying, please give the project a GitHub star. It would make this tiny organizer very happy ★</p><button class="manual-github-link" onclick={openProjectPage}>Open MoveMgr on GitHub ↗</button></div></div><footer class="modal-actions"><button onclick={() => (dialog = null)}>Close</button></footer></div></div>
 {/if}

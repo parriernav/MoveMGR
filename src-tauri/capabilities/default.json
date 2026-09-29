@@ -3,5 +3,13 @@
   "identifier": "default",
   "description": "MoveMgr main window permissions",
   "windows": ["main"],
-  "permissions": ["core:default", "dialog:allow-open", "dialog:allow-save"]
+  "permissions": [
+    "core:default",
+    "dialog:allow-open",
+    "dialog:allow-save",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [{ "url": "https://github.com/parriernav/MoveMGR" }]
+    }
+  ]
 }

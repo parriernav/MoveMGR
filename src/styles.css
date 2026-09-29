@@ -219,6 +219,9 @@ td small { display: block; margin-top: 4px; color: var(--muted); }
 .manual-body p { color: var(--muted); }
 .manual-body ol { display: grid; gap: 10px; margin: 0 0 22px; padding-left: 22px; }
 .manual-note { margin: 0; padding: 14px 16px; border-radius: 9px; background: var(--accent-soft); color: var(--text) !important; }
+.manual-note p { margin: 0 0 10px; color: var(--text); }
+.manual-github-link { border-color: var(--accent); background: var(--accent); color: white; font-weight: 700; }
+.manual-github-link:hover { filter: brightness(1.08); }
 .switch-row { display: flex; justify-content: space-between; align-items: center; gap: 20px; }
 .switch-row span { display: grid; }
 .switch-row small, .about small { color: var(--muted); }
