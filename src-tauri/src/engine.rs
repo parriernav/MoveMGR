@@ -2,7 +2,7 @@ use crate::{models::*, rules};
 use chrono::Utc;
 use sha2::{Digest, Sha256};
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     fs,
     io::{Read, Write},
     path::{Path, PathBuf},
@@ -106,10 +106,46 @@ fn add_skipped(
     });
 }
 
-fn target_directory(project: &Project, key: Option<&str>) -> Result<PathBuf, String> {
+struct TargetSelection {
+    directory: PathBuf,
+    round_robin_group: Option<Vec<PathBuf>>,
+}
+
+impl From<PathBuf> for TargetSelection {
+    fn from(directory: PathBuf) -> Self {
+        Self {
+            directory,
+            round_robin_group: None,
+        }
+    }
+}
+
+fn matching_folder_index(
+    folders: &[PathBuf],
+    policy: MultipleMatchPolicy,
+    round_robin_counts: &HashMap<Vec<PathBuf>, usize>,
+) -> Result<usize, String> {
+    match folders.len() {
+        0 => Err("NO_TARGET_MATCH".into()),
+        1 => Ok(0),
+        _ => match policy {
+            MultipleMatchPolicy::Skip => Err("AMBIGUOUS_TARGET".into()),
+            MultipleMatchPolicy::First => Ok(0),
+            MultipleMatchPolicy::RoundRobin => {
+                Ok(round_robin_counts.get(folders).copied().unwrap_or(0) % folders.len())
+            }
+        },
+    }
+}
+
+fn target_directory(
+    project: &Project,
+    key: Option<&str>,
+    round_robin_counts: &HashMap<Vec<PathBuf>, usize>,
+) -> Result<TargetSelection, String> {
     let root = PathBuf::from(&project.target.root);
     match &project.target.destination {
-        Destination::Root => Ok(root),
+        Destination::Root => Ok(root.into()),
         Destination::FixedSubfolder {
             relative_path,
             create_if_missing,
@@ -118,7 +154,7 @@ fn target_directory(project: &Project, key: Option<&str>) -> Result<PathBuf, Str
             if !path.exists() && !create_if_missing {
                 Err("TARGET_FOLDER_MISSING".into())
             } else {
-                Ok(path)
+                Ok(path.into())
             }
         }
         Destination::KeySubfolder {
@@ -133,7 +169,7 @@ fn target_directory(project: &Project, key: Option<&str>) -> Result<PathBuf, Str
             if !path.exists() && !create_if_missing {
                 Err("NO_TARGET_MATCH".into())
             } else {
-                Ok(path)
+                Ok(path.into())
             }
         }
         Destination::MatchSubfolder {
@@ -141,6 +177,7 @@ fn target_directory(project: &Project, key: Option<&str>) -> Result<PathBuf, Str
             folder_extractor,
             comparison,
             no_match,
+            multiple_matches,
         } => {
             let key = key.ok_or("EMPTY_KEY")?;
             let base = root.join(search_base);
@@ -169,19 +206,23 @@ fn target_directory(project: &Project, key: Option<&str>) -> Result<PathBuf, Str
                     }
                 }
             }
-            matches.sort_by_key(|path| normalized_path_key(path));
-            match matches.len() {
-                1 => Ok(matches.remove(0)),
-                0 if matches!(no_match, NoMatch::CreateKeyFolder) => {
-                    if !rules::valid_key_folder(key) {
-                        Err("INVALID_TARGET_NAME".into())
-                    } else {
-                        Ok(base.join(key))
-                    }
-                }
-                0 => Err("NO_TARGET_MATCH".into()),
-                _ => Err("AMBIGUOUS_TARGET".into()),
+            matches.sort_by_cached_key(|path| (normalized_path_key(path), path.clone()));
+            if matches.is_empty() && matches!(no_match, NoMatch::CreateKeyFolder) {
+                return if rules::valid_key_folder(key) {
+                    Ok(base.join(key).into())
+                } else {
+                    Err("INVALID_TARGET_NAME".into())
+                };
             }
+            let index = matching_folder_index(&matches, *multiple_matches, round_robin_counts)?;
+            let directory = matches[index].clone();
+            let round_robin_group = (matches.len() > 1
+                && matches!(multiple_matches, MultipleMatchPolicy::RoundRobin))
+            .then_some(matches);
+            Ok(TargetSelection {
+                directory,
+                round_robin_group,
+            })
         }
     }
 }
@@ -274,6 +315,8 @@ pub fn create_plan(state: &LocalState, project_ids: &[String]) -> Result<Interna
     let mut reserved = HashSet::new();
     let mut items = vec![];
     for (project, source_root, _) in roots {
+        // Each candidate-folder group rotates independently within this project's plan.
+        let mut round_robin_counts = HashMap::new();
         let walker = if project.source.recursive {
             WalkDir::new(&source_root)
         } else {
@@ -324,21 +367,28 @@ pub fn create_plan(state: &LocalState, project_ids: &[String]) -> Result<Interna
             } else {
                 None
             };
-            let directory = match target_directory(project, key.as_deref()) {
+            let selection = match target_directory(project, key.as_deref(), &round_robin_counts) {
                 Ok(value) => value,
                 Err(code) => {
                     add_skipped(&mut items, project, &source, len, modified, key, &code);
                     continue;
                 }
             };
-            let target =
-                match unique_target(directory.join(file_name), project.conflict, &mut reserved) {
-                    Ok(value) => value,
-                    Err(code) => {
-                        add_skipped(&mut items, project, &source, len, modified, key, &code);
-                        continue;
-                    }
-                };
+            let target = match unique_target(
+                selection.directory.join(file_name),
+                project.conflict,
+                &mut reserved,
+            ) {
+                Ok(value) => value,
+                Err(code) => {
+                    add_skipped(&mut items, project, &source, len, modified, key, &code);
+                    continue;
+                }
+            };
+            // Conflicts that skip a file must not consume a folder's turn.
+            if let Some(group) = selection.round_robin_group {
+                *round_robin_counts.entry(group).or_insert(0) += 1;
+            }
             let public = PlannedItem {
                 item_id: Uuid::new_v4().to_string(),
                 project_id: project.id.clone(),
@@ -628,9 +678,10 @@ pub fn evaluate_example(
         Destination::MatchSubfolder {
             folder_extractor,
             comparison,
+            multiple_matches,
             ..
         } => {
-            let matching: Vec<&String> = sample_folders
+            let mut matching: Vec<PathBuf> = sample_folders
                 .iter()
                 .filter(|folder| {
                     rules::extract(folder, folder_extractor, project.key.trim)
@@ -644,12 +695,13 @@ pub fn evaluate_example(
                         })
                         .unwrap_or(false)
                 })
+                .map(PathBuf::from)
                 .collect();
-            if matching.len() == 1 {
-                Some(matching[0].clone())
-            } else {
-                None
-            }
+            matching.sort_by_cached_key(|path| (normalized_path_key(path), path.clone()));
+            // A single-file example begins at the first turn, like a fresh plan.
+            matching_folder_index(&matching, *multiple_matches, &HashMap::new())
+                .ok()
+                .map(|index| matching[index].to_string_lossy().into_owned())
         }
     };
     Ok(serde_json::json!({"key": key, "targetFolder": folder, "reason": null}))
@@ -727,6 +779,257 @@ mod tests {
             },
             projects: vec![project],
             rule_tags: vec![],
+        }
+    }
+
+    fn matching_destination(policy: MultipleMatchPolicy) -> Destination {
+        Destination::MatchSubfolder {
+            search_base: String::new(),
+            folder_extractor: Extractor::BeforeDelimiter {
+                delimiter: "_".into(),
+                missing: MissingDelimiter::UseWhole,
+            },
+            comparison: Comparison::Equals,
+            no_match: NoMatch::Skip,
+            multiple_matches: policy,
+        }
+    }
+
+    #[test]
+    fn multiple_match_policies_plan_and_execute_in_folder_name_order() {
+        for (policy, expected) in [
+            (MultipleMatchPolicy::Skip, vec![]),
+            (MultipleMatchPolicy::First, vec!["client_a"; 5]),
+            (
+                MultipleMatchPolicy::RoundRobin,
+                vec!["client_a", "client_b", "client_c", "client_a", "client_b"],
+            ),
+        ] {
+            let temp = TempDir::new().unwrap();
+            let source = temp.path().join("source");
+            let target = temp.path().join("target");
+            fs::create_dir_all(&source).unwrap();
+            for folder in ["client_c", "client_b", "client_a"] {
+                fs::create_dir_all(target.join(folder)).unwrap();
+            }
+            for index in 1..=5 {
+                fs::write(source.join(format!("client_{index}.pdf")), b"new").unwrap();
+            }
+            let project = project(
+                &source,
+                &target,
+                matching_destination(policy),
+                Conflict::Skip,
+            );
+            let id = project.id.clone();
+            let state = state(project);
+            let plan = create_plan(&state, &[id.clone()]).unwrap();
+            let planned: Vec<PathBuf> = plan
+                .items
+                .iter()
+                .filter_map(|item| item.target.clone())
+                .collect();
+            let expected_paths: Vec<PathBuf> = expected
+                .iter()
+                .enumerate()
+                .map(|(index, folder)| {
+                    target
+                        .join(folder)
+                        .join(format!("client_{}.pdf", index + 1))
+                })
+                .collect();
+            assert_eq!(planned, expected_paths);
+            assert_eq!(plan.public.skipped, 5 - expected.len());
+            if expected.is_empty() {
+                assert!(plan
+                    .public
+                    .items
+                    .iter()
+                    .all(|item| item.reason_code.as_deref() == Some("AMBIGUOUS_TARGET")));
+            }
+            // Repeated previews restart rotation without mutating source or target contents.
+            let repeated = create_plan(&state, &[id]).unwrap();
+            assert_eq!(
+                repeated
+                    .items
+                    .iter()
+                    .filter_map(|item| item.target.clone())
+                    .collect::<Vec<_>>(),
+                planned
+            );
+            assert_eq!(fs::read_dir(&source).unwrap().count(), 5);
+            let result =
+                execute_plan(plan, &temp.path().join("runs"), &AtomicBool::new(false)).unwrap();
+            assert_eq!(result.moved, expected.len());
+            assert_eq!(result.failed, 0);
+            for path in planned {
+                assert_eq!(fs::read(path).unwrap(), b"new");
+            }
+        }
+    }
+
+    #[test]
+    fn round_robin_groups_equivalent_keys_and_keeps_projects_independent() {
+        let temp = TempDir::new().unwrap();
+        let target = temp.path().join("target");
+        for folder in ["alpha_a", "alpha_b", "beta_a", "beta_b"] {
+            fs::create_dir_all(target.join(folder)).unwrap();
+        }
+        let mut projects = vec![];
+        for index in 1..=2 {
+            let source = temp.path().join(format!("source{index}"));
+            for (subfolder, name) in [
+                ("01", "ALPHA1_doc.pdf"),
+                ("02", "BETA1_doc.pdf"),
+                ("03", "alpha2_doc.pdf"),
+                ("04", "beta2_doc.pdf"),
+            ] {
+                fs::create_dir_all(source.join(subfolder)).unwrap();
+                fs::write(source.join(subfolder).join(name), b"new").unwrap();
+            }
+            let mut destination = matching_destination(MultipleMatchPolicy::RoundRobin);
+            if let Destination::MatchSubfolder { comparison, .. } = &mut destination {
+                *comparison = Comparison::PrefixEqual { count: 4 };
+            }
+            let mut project = project(&source, &target, destination, Conflict::RenameWithNumber);
+            project.source.recursive = true;
+            projects.push(project);
+        }
+        let ids: Vec<String> = projects.iter().map(|project| project.id.clone()).collect();
+        let mut state = state(projects[0].clone());
+        state.projects = projects;
+        let plan = create_plan(&state, &ids).unwrap();
+        assert_eq!(plan.public.movable, 8);
+        let folders: Vec<&str> = plan
+            .items
+            .iter()
+            .map(|item| {
+                item.target
+                    .as_ref()
+                    .unwrap()
+                    .parent()
+                    .unwrap()
+                    .file_name()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+            })
+            .collect();
+        assert_eq!(
+            folders,
+            ["alpha_a", "beta_a", "alpha_b", "beta_b", "alpha_a", "beta_a", "alpha_b", "beta_b"]
+        );
+    }
+
+    #[test]
+    fn skipped_conflicts_do_not_consume_round_robin_turns() {
+        let temp = TempDir::new().unwrap();
+        let source = temp.path().join("source");
+        let target = temp.path().join("target");
+        fs::create_dir_all(&source).unwrap();
+        for folder in ["client_a", "client_b"] {
+            fs::create_dir_all(target.join(folder)).unwrap();
+        }
+        for index in 1..=3 {
+            fs::write(source.join(format!("client_{index}.pdf")), b"new").unwrap();
+        }
+        fs::write(target.join("client_a/client_1.pdf"), b"existing").unwrap();
+        let project = project(
+            &source,
+            &target,
+            matching_destination(MultipleMatchPolicy::RoundRobin),
+            Conflict::Skip,
+        );
+        let id = project.id.clone();
+        let plan = create_plan(&state(project), &[id]).unwrap();
+        assert_eq!(
+            plan.public.items[0].reason_code.as_deref(),
+            Some("TARGET_EXISTS")
+        );
+        assert_eq!(
+            plan.items[1].target.as_ref().unwrap(),
+            &target.join("client_a/client_2.pdf")
+        );
+        assert_eq!(
+            plan.items[2].target.as_ref().unwrap(),
+            &target.join("client_b/client_3.pdf")
+        );
+        let result =
+            execute_plan(plan, &temp.path().join("runs"), &AtomicBool::new(false)).unwrap();
+        assert_eq!(result.moved, 2);
+        assert_eq!(
+            fs::read(target.join("client_a/client_1.pdf")).unwrap(),
+            b"existing"
+        );
+        assert!(source.join("client_1.pdf").exists());
+    }
+
+    #[test]
+    fn match_policies_preserve_single_folder_and_no_match_behavior() {
+        let temp = TempDir::new().unwrap();
+        let source = temp.path().join("source");
+        let target = temp.path().join("target");
+        fs::create_dir_all(&source).unwrap();
+        fs::create_dir_all(target.join("client_a")).unwrap();
+        for policy in [
+            MultipleMatchPolicy::Skip,
+            MultipleMatchPolicy::First,
+            MultipleMatchPolicy::RoundRobin,
+        ] {
+            let mut project = project(
+                &source,
+                &target,
+                matching_destination(policy),
+                Conflict::Skip,
+            );
+            assert_eq!(
+                target_directory(&project, Some("client"), &HashMap::new())
+                    .unwrap()
+                    .directory,
+                target.join("client_a")
+            );
+            assert_eq!(
+                target_directory(&project, Some("missing"), &HashMap::new())
+                    .err()
+                    .unwrap(),
+                "NO_TARGET_MATCH"
+            );
+            if let Destination::MatchSubfolder { no_match, .. } = &mut project.target.destination {
+                *no_match = NoMatch::CreateKeyFolder;
+            }
+            assert_eq!(
+                target_directory(&project, Some("missing"), &HashMap::new())
+                    .unwrap()
+                    .directory,
+                target.join("missing")
+            );
+            assert!(!target.join("missing").exists());
+        }
+    }
+
+    #[test]
+    fn examples_honor_multiple_match_policies() {
+        for (policy, expected) in [
+            (MultipleMatchPolicy::Skip, serde_json::Value::Null),
+            (MultipleMatchPolicy::First, serde_json::json!("client_a")),
+            (
+                MultipleMatchPolicy::RoundRobin,
+                serde_json::json!("client_a"),
+            ),
+        ] {
+            let project = project(
+                Path::new("source"),
+                Path::new("target"),
+                matching_destination(policy),
+                Conflict::Skip,
+            );
+            let result = evaluate_example(
+                &project,
+                "client_doc.pdf",
+                &["client_b".into(), "client_a".into()],
+            )
+            .unwrap();
+            assert_eq!(result["targetFolder"], expected);
         }
     }
 

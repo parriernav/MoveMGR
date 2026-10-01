@@ -74,6 +74,8 @@ pub enum Destination {
         comparison: Comparison,
         #[serde(rename = "noMatch", alias = "no_match")]
         no_match: NoMatch,
+        #[serde(default, rename = "multipleMatches", alias = "multiple_matches")]
+        multiple_matches: MultipleMatchPolicy,
     },
     KeySubfolder {
         #[serde(rename = "parentRelativePath", alias = "parent_relative_path")]
@@ -88,6 +90,15 @@ pub enum Destination {
 pub enum NoMatch {
     Skip,
     CreateKeyFolder,
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum MultipleMatchPolicy {
+    #[default]
+    First,
+    RoundRobin,
+    Skip,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -338,7 +349,7 @@ mod tests {
     fn destination_rules_accept_frontend_fields_and_serialize_them_back() {
         let cases = [
             json!({"mode":"fixedSubfolder","relativePath":"완료/2026","createIfMissing":true}),
-            json!({"mode":"matchSubfolder","searchBase":"","folderExtractor":{"kind":"beforeDelimiter","delimiter":"-","missing":"skip"},"comparison":{"kind":"equals"},"noMatch":"skip"}),
+            json!({"mode":"matchSubfolder","searchBase":"","folderExtractor":{"kind":"beforeDelimiter","delimiter":"-","missing":"skip"},"comparison":{"kind":"equals"},"noMatch":"skip","multipleMatches":"roundRobin"}),
             json!({"mode":"keySubfolder","parentRelativePath":"보관","createIfMissing":true}),
         ];
         for value in cases {
@@ -355,6 +366,7 @@ mod tests {
         assert_eq!(current["searchBase"], "");
         assert_eq!(current["folderExtractor"]["kind"], "whole");
         assert_eq!(current["noMatch"], "skip");
+        assert_eq!(current["multipleMatches"], "first");
 
         let extensions: ExtensionFilter = serde_json::from_value(
             json!({"mode":"only","values":["pdf"],"include_extensionless":false}),
@@ -364,6 +376,25 @@ mod tests {
             serde_json::to_value(extensions).unwrap()["includeExtensionless"],
             false
         );
+    }
+
+    #[test]
+    fn multiple_match_policies_round_trip_and_old_settings_default_to_first() {
+        let old = json!({"mode":"matchSubfolder","searchBase":"","folderExtractor":{"kind":"whole"},"comparison":{"kind":"equals"},"noMatch":"skip"});
+        let rule: Destination = serde_json::from_value(old.clone()).unwrap();
+        assert_eq!(
+            serde_json::to_value(rule).unwrap()["multipleMatches"],
+            "first"
+        );
+        for policy in ["skip", "first", "roundRobin"] {
+            let mut current = old.clone();
+            current["multipleMatches"] = json!(policy);
+            let rule: Destination = serde_json::from_value(current.clone()).unwrap();
+            assert_eq!(serde_json::to_value(rule).unwrap(), current);
+        }
+        let mut invalid = old;
+        invalid["multipleMatches"] = json!("unknown");
+        assert!(serde_json::from_value::<Destination>(invalid).is_err());
     }
 
     #[test]
@@ -396,6 +427,7 @@ mod tests {
                     folder_extractor: Extractor::Whole,
                     comparison: Comparison::Equals,
                     no_match: NoMatch::Skip,
+                    multiple_matches: MultipleMatchPolicy::RoundRobin,
                 },
                 conflict: Conflict::Skip,
             },
@@ -407,5 +439,10 @@ mod tests {
         );
         let decoded: LocalState = serde_json::from_value(encoded).unwrap();
         assert_eq!(decoded.rule_tags.len(), 1);
+        assert_eq!(
+            serde_json::to_value(decoded).unwrap()["ruleTags"][0]["rules"]["destination"]
+                ["multipleMatches"],
+            "roundRobin"
+        );
     }
 }

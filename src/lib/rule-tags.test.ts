@@ -23,9 +23,14 @@ describe('rule tags', () => {
 
   it('snapshots target rules independently of later edits', () => {
     const project = newProject();
-    project.target.destination = { mode: 'matchSubfolder', searchBase: '', folderExtractor: { kind: 'whole' }, comparison: { kind: 'equals' }, noMatch: 'skip' };
+    project.target.destination = { mode: 'matchSubfolder', searchBase: '', folderExtractor: { kind: 'whole' }, comparison: { kind: 'equals' }, noMatch: 'skip', multipleMatches: 'roundRobin' };
     const saved = snapshotRules(project, 'target');
     project.target.destination = { mode: 'root' };
     expect(saved.destination.mode).toBe('matchSubfolder');
+    const applied = applyRuleTag(project, { id: crypto.randomUUID(), name: '균등 배분', kind: 'target', rules: saved });
+    expect(applied.target.destination).toEqual(saved.destination);
+    if (applied.target.destination.mode === 'matchSubfolder') {
+      expect(applied.target.destination.multipleMatches).toBe('roundRobin');
+    }
   });
 });

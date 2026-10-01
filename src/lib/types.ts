@@ -12,6 +12,8 @@ export type NameFilter = {
   value: string;
 };
 
+export type MultipleMatchPolicy = 'first' | 'roundRobin' | 'skip';
+
 export type Destination =
   | { mode: 'root' }
   | { mode: 'fixedSubfolder'; relativePath: string; createIfMissing: boolean }
@@ -24,6 +26,7 @@ export type Destination =
         | { kind: 'startsWith' }
         | { kind: 'prefixEqual'; count: number };
       noMatch: 'skip' | 'createKeyFolder';
+      multipleMatches?: MultipleMatchPolicy;
     }
   | { mode: 'keySubfolder'; parentRelativePath: string; createIfMissing: boolean };
 

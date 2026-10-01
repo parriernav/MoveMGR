@@ -40,6 +40,11 @@ export function targetSummaryLines(project: Project, language: Language = 'ko'):
     key,
     translate(language, 'summaryExisting', { path: base }),
     translate(language, 'summaryFolderCompare', { folderKey, comparison: compare }),
+    translate(language, 'summaryMultipleMatches', {
+      policy: translate(language, destination.multipleMatches === 'skip'
+        ? 'multipleMatchesSkip'
+        : destination.multipleMatches === 'roundRobin' ? 'multipleMatchesRoundRobin' : 'multipleMatchesFirst')
+    }),
     translate(language, 'summaryNoMatch', { action: translate(language, destination.noMatch === 'skip' ? 'summarySkip' : 'createKeyFolder'), conflict })
   ];
 }

@@ -9,7 +9,7 @@
   import { applyRuleTag, normalizedTagName, snapshotRules } from './lib/rule-tags';
   import { targetSummaryLines } from './lib/rule-summary';
   import * as api from './lib/ipc';
-  import type { AppInfo, LocalState, Plan, Project, RuleTag, RunResult } from './lib/types';
+  import type { AppInfo, LocalState, MultipleMatchPolicy, Plan, Project, RuleTag, RunResult } from './lib/types';
 
   let state: LocalState = structuredClone(emptyState);
   let appInfo: AppInfo = { version: '0.0.1', platform: 'desktop', configDir: '' };
@@ -593,7 +593,7 @@
         </fieldset>
 
         <fieldset><legend>{t('destination')}</legend>
-          <label class="field"><span>{t('destinationMethod')}</span><select value={editing.target.destination.mode} onchange={(event) => { const mode = event.currentTarget.value; if (mode === 'root') editing!.target.destination = { mode: 'root' }; else if (mode === 'fixedSubfolder') editing!.target.destination = { mode, relativePath: '', createIfMissing: true }; else if (mode === 'keySubfolder') editing!.target.destination = { mode, parentRelativePath: '', createIfMissing: true }; else editing!.target.destination = { mode: 'matchSubfolder', searchBase: '', folderExtractor: { kind: 'whole' }, comparison: { kind: 'equals' }, noMatch: 'skip' }; editing = structuredClone(editing); }}><option value="root">{t('targetRootDirect')}</option><option value="fixedSubfolder">{t('fixedSubfolder')}</option><option value="matchSubfolder">{t('matchSubfolder')}</option><option value="keySubfolder">{t('keySubfolder')}</option></select></label>
+          <label class="field"><span>{t('destinationMethod')}</span><select value={editing.target.destination.mode} onchange={(event) => { const mode = event.currentTarget.value; if (mode === 'root') editing!.target.destination = { mode: 'root' }; else if (mode === 'fixedSubfolder') editing!.target.destination = { mode, relativePath: '', createIfMissing: true }; else if (mode === 'keySubfolder') editing!.target.destination = { mode, parentRelativePath: '', createIfMissing: true }; else editing!.target.destination = { mode: 'matchSubfolder', searchBase: '', folderExtractor: { kind: 'whole' }, comparison: { kind: 'equals' }, noMatch: 'skip', multipleMatches: 'first' }; editing = structuredClone(editing); }}><option value="root">{t('targetRootDirect')}</option><option value="fixedSubfolder">{t('fixedSubfolder')}</option><option value="matchSubfolder">{t('matchSubfolder')}</option><option value="keySubfolder">{t('keySubfolder')}</option></select></label>
           {#if editing.target.destination.mode === 'fixedSubfolder'}<label class="field"><span>{t('subfolder')}</span><input bind:value={editing.target.destination.relativePath} placeholder={t('completedPlaceholder')} /></label><label class="inline-check"><input type="checkbox" bind:checked={editing.target.destination.createIfMissing} /> {t('createIfMissing')}</label>{/if}
           {#if editing.target.destination.mode === 'keySubfolder'}<label class="field"><span>{t('baseSubfolder')}</span><input bind:value={editing.target.destination.parentRelativePath} /></label><label class="inline-check"><input type="checkbox" bind:checked={editing.target.destination.createIfMissing} /> {t('createIfMissing')}</label>{/if}
           {#if editing.target.destination.mode === 'matchSubfolder'}
@@ -604,6 +604,8 @@
             <label class="field"><span>{t('comparisonMethod')}</span><select value={editing.target.destination.comparison.kind} onchange={(event) => { const kind = event.currentTarget.value; editing!.target.destination.mode === 'matchSubfolder' && (editing!.target.destination.comparison = kind === 'prefixEqual' ? { kind, count: 3 } : { kind } as {kind:'equals'|'startsWith'}); editing = structuredClone(editing); }}><option value="equals">{t('keyEquals')}</option><option value="startsWith">{t('folderStartsWithKey')}</option><option value="prefixEqual">{t('prefixesEqual')}</option></select></label>
             {#if editing.target.destination.comparison.kind === 'prefixEqual'}<label class="field"><span>{t('comparisonLength')}</span><input type="number" min="1" max="255" bind:value={editing.target.destination.comparison.count} /></label>{/if}
             <label class="field"><span>{t('whenNoMatch')}</span><select bind:value={editing.target.destination.noMatch}><option value="skip">{t('skip')}</option><option value="createKeyFolder">{t('createKeyFolder')}</option></select></label>
+            <label class="field"><span>{t('whenMultipleMatches')}</span><select value={editing.target.destination.multipleMatches ?? 'first'} onchange={(event) => { if (editing?.target.destination.mode !== 'matchSubfolder') return; editing.target.destination.multipleMatches = event.currentTarget.value as MultipleMatchPolicy; editing = structuredClone(editing); }}><option value="first">{t('multipleMatchesFirst')}</option><option value="roundRobin">{t('multipleMatchesRoundRobin')}</option><option value="skip">{t('multipleMatchesSkip')}</option></select></label>
+            <p class="field-help">{t('multipleMatchesHelp')}</p>
           {/if}
           <label class="field"><span>{t('nameConflict')}</span><select bind:value={editing.conflict}><option value="skip">{t('skip')}</option><option value="renameWithNumber">{t('renameWithNumber')}</option></select></label>
         </fieldset>

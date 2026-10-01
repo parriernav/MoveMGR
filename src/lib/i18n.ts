@@ -63,6 +63,10 @@ const en = {
   themeSystem: 'System setting', themeLight: 'Light', themeDark: 'Dark', previewBeforeRun: 'Preview before run', previewDescription: 'Show the move plan before the run starts.',
   configLocation: 'Settings location: {path}', language: 'Language', manualTitle: 'MoveMgr Manual',
   newProject: 'New project', copySuffix: ' copy',
+  whenMultipleMatches: 'When multiple folders match',
+  multipleMatchesSkip: 'Skip', multipleMatchesFirst: 'Send all to the first folder', multipleMatchesRoundRobin: 'Distribute evenly in turn',
+  multipleMatchesHelp: 'Folders are ordered by name. Rotation restarts for each project plan and matching folder group; skipped files do not consume a turn.',
+  summaryMultipleMatches: 'Multiple matches: {policy}',
   reasonKeyTooShort: 'The name is shorter than the required length.', reasonDelimiterMissing: 'The name does not contain the delimiter.', reasonEmptyKey: 'The key is empty.',
   reasonNoTarget: 'No matching subfolder was found.', reasonAmbiguousTarget: 'More than one subfolder matched.', reasonInvalidTarget: 'The key cannot be used as a folder name.',
   reasonTargetExists: 'A file with the same name already exists.', reasonTargetFolderMissing: 'The destination subfolder does not exist.',
@@ -79,6 +83,10 @@ export type MessageKey = keyof typeof en;
 
 const ko: Record<MessageKey, string> = {
   ...en,
+  whenMultipleMatches: '일치하는 폴더가 여러 개일 때',
+  multipleMatchesSkip: '건너뛰기', multipleMatchesFirst: '첫 번째 폴더에 모으기', multipleMatchesRoundRobin: '순서대로 균등 배분',
+  multipleMatchesHelp: '폴더 이름순으로 선택합니다. 순환은 프로젝트의 이동 계획마다 일치 폴더 그룹별로 처음부터 시작하며, 건너뛴 파일은 차례를 소비하지 않습니다.',
+  summaryMultipleMatches: '복수 일치: {policy}',
   projectName: '프로젝트명', sourceFolder: '소스 폴더', targetFolder: '타겟 폴더', extensions: '확장자', filenameCondition: '파일명 조건', keyLength: '분류 글자 수', keyDelimiter: '분류 구분자', targetSubfolder: '타겟 하위 폴더', folderKeyLength: '폴더 추출 글자 수', folderDelimiter: '폴더 구분자', compareLength: '비교 글자 수',
   browserPreview: '브라우저 미리보기 모드입니다. 실제 파일 기능은 데스크톱 앱에서 동작합니다.', projectAdded: '새 프로젝트를 추가했습니다. 각 항목을 눌러 설정하세요.', projectNameRequired: '프로젝트 이름을 입력해주세요.', desktopFolderOnly: '폴더 선택은 데스크톱 앱에서 사용할 수 있습니다.', folderChanged: '{side} 폴더를 변경했습니다.', source: '소스', target: '타겟', tagNameRequired: '태그 이름을 입력해주세요.', tagNameTooLong: '태그 이름은 80글자 이하로 입력해주세요.', duplicateTagName: '같은 이름의 태그가 이미 있습니다.', tagSaved: '“{name}” 태그를 저장했습니다.', tagRenamed: '태그 이름을 “{name}”(으)로 변경했습니다.', tagApplied: '“{name}” 태그를 적용했습니다.', tagUpdated: '“{name}” 태그의 내용을 갱신했습니다.', deleteTagConfirm: '“{name}” 태그를 삭제할까요? 프로젝트에 이미 적용된 조건은 그대로 유지됩니다.', tagDeleted: '“{name}” 태그를 삭제했습니다.',
   extensionRequired: '확장자를 하나 이상 입력해주세요.', filterTextRequired: '파일명 조건의 문자열을 입력해주세요.', keyLengthInvalid: '분류 글자 수는 1 이상이어야 합니다.', delimiterRequired: '구분자를 입력해주세요.', compareLengthInvalid: '타겟 비교 글자 수는 1 이상이어야 합니다.', rulesSaved: '조건을 저장했습니다.', deleteProjectConfirm: '“{name}” 프로젝트 설정을 삭제할까요? 파일은 삭제되지 않습니다.', allFiles: '모든 파일', recursive: '하위 폴더 포함', currentFolder: '현재 폴더', extensionsUnset: '확장자 미지정', desktopMoveOnly: '실제 파일 미리보기와 이동은 데스크톱 앱에서만 사용할 수 있습니다.', scanning: '파일을 검사하고 있습니다…', moving: '파일을 이동하고 있습니다. 앱을 종료하지 마세요…', reviewItems: '일부 항목을 확인해야 합니다.', moveComplete: '파일 이동을 완료했습니다.', cancelling: '현재 파일 처리가 끝나는 안전한 지점에서 취소합니다…', desktopHistoryOnly: '실행 기록은 데스크톱 앱에서 확인할 수 있습니다.', desktopExportOnly: '설정 내보내기는 데스크톱 앱에서 사용할 수 있습니다.', exportTitle: 'MoveMgr 설정 내보내기', exported: '설정을 내보냈습니다.', desktopImportOnly: '설정 가져오기는 데스크톱 앱에서 사용할 수 있습니다.', importTitle: 'MoveMgr 설정 가져오기', importModeConfirm: '확인을 누르면 현재 프로젝트 뒤에 추가합니다.\n취소를 누르면 기존 설정을 교체합니다.', projectsAppended: '프로젝트를 추가했습니다.', settingsReplaced: '설정을 교체했습니다.',
@@ -90,6 +98,10 @@ const ko: Record<MessageKey, string> = {
 
 const ja: Record<MessageKey, string> = {
   ...en,
+  whenMultipleMatches: '複数のフォルダーが一致する場合',
+  multipleMatchesSkip: 'スキップ', multipleMatchesFirst: '最初のフォルダーにまとめる', multipleMatchesRoundRobin: '順番に均等に振り分ける',
+  multipleMatchesHelp: 'フォルダー名順に選択します。各プロジェクトの移動計画で、一致するフォルダー群ごとに最初から循環します。スキップしたファイルは順番を進めません。',
+  summaryMultipleMatches: '複数一致: {policy}',
   projectName: 'プロジェクト名', sourceFolder: 'ソースフォルダー', targetFolder: 'ターゲットフォルダー', extensions: '拡張子', filenameCondition: 'ファイル名条件', keyLength: '分類文字数', keyDelimiter: '分類区切り文字', targetSubfolder: 'ターゲットのサブフォルダー', folderKeyLength: 'フォルダー抽出文字数', folderDelimiter: 'フォルダー区切り文字', compareLength: '比較文字数',
   browserPreview: 'ブラウザプレビューモードです。実際のファイル操作はデスクトップアプリで利用できます。', projectAdded: '新しいプロジェクトを追加しました。各項目を選択して設定してください。', projectNameRequired: 'プロジェクト名を入力してください。', desktopFolderOnly: 'フォルダー選択はデスクトップアプリで利用できます。', folderChanged: '{side}フォルダーを変更しました。', source: 'ソース', target: 'ターゲット', tagNameRequired: 'タグ名を入力してください。', tagNameTooLong: 'タグ名は80文字以内で入力してください。', duplicateTagName: '同じ名前のタグがすでにあります。', tagSaved: '「{name}」タグを保存しました。', tagRenamed: 'タグ名を「{name}」に変更しました。', tagApplied: '「{name}」タグを適用しました。', tagUpdated: '「{name}」タグを更新しました。', deleteTagConfirm: '「{name}」タグを削除しますか？プロジェクトに適用済みのルールは維持されます。', tagDeleted: '「{name}」タグを削除しました。',
   extensionRequired: '拡張子を1つ以上入力してください。', filterTextRequired: 'ファイル名条件の文字列を入力してください。', keyLengthInvalid: '分類文字数は1以上にしてください。', delimiterRequired: '区切り文字を入力してください。', compareLengthInvalid: '比較文字数は1以上にしてください。', rulesSaved: 'ルールを保存しました。', deleteProjectConfirm: '「{name}」のプロジェクト設定を削除しますか？ファイルは削除されません。', allFiles: 'すべてのファイル', recursive: 'サブフォルダーを含む', currentFolder: '現在のフォルダー', extensionsUnset: '拡張子未指定', desktopMoveOnly: 'ファイルのプレビューと移動はデスクトップアプリでのみ利用できます。', scanning: 'ファイルを確認しています…', moving: 'ファイルを移動しています。アプリを終了しないでください…', reviewItems: '確認が必要な項目があります。', moveComplete: 'ファイルの移動が完了しました。', cancelling: '現在のファイル処理後、安全な時点で停止します…', desktopHistoryOnly: '実行履歴はデスクトップアプリで確認できます。', desktopExportOnly: '設定のエクスポートはデスクトップアプリで利用できます。', exportTitle: 'MoveMgr設定をエクスポート', exported: '設定をエクスポートしました。', desktopImportOnly: '設定のインポートはデスクトップアプリで利用できます。', importTitle: 'MoveMgr設定をインポート', importModeConfirm: 'OKを選ぶと現在のリストに追加します。\nキャンセルを選ぶと既存設定を置き換えます。', projectsAppended: 'プロジェクトを追加しました。', settingsReplaced: '設定を置き換えました。',
@@ -100,6 +112,10 @@ const ja: Record<MessageKey, string> = {
 
 const zh: Record<MessageKey, string> = {
   ...en,
+  whenMultipleMatches: '多个文件夹匹配时',
+  multipleMatchesSkip: '跳过', multipleMatchesFirst: '全部放入第一个文件夹', multipleMatchesRoundRobin: '依次均匀分配',
+  multipleMatchesHelp: '按文件夹名称排序。每个项目的移动计划按匹配文件夹组从头轮流分配；跳过的文件不会占用轮次。',
+  summaryMultipleMatches: '多个匹配：{policy}',
   projectName: '项目名称', sourceFolder: '源文件夹', targetFolder: '目标文件夹', extensions: '扩展名', filenameCondition: '文件名条件', keyLength: '分类字符数', keyDelimiter: '分类分隔符', targetSubfolder: '目标子文件夹', folderKeyLength: '文件夹提取字符数', folderDelimiter: '文件夹分隔符', compareLength: '比较字符数',
   browserPreview: '当前为浏览器预览模式。实际文件操作请使用桌面应用。', projectAdded: '已添加新项目。请选择各项进行设置。', projectNameRequired: '请输入项目名称。', desktopFolderOnly: '文件夹选择仅在桌面应用中可用。', folderChanged: '已更新{side}文件夹。', source: '源', target: '目标', tagNameRequired: '请输入标签名称。', tagNameTooLong: '标签名称不能超过80个字符。', duplicateTagName: '已存在同名标签。', tagSaved: '已保存“{name}”标签。', tagRenamed: '已将标签重命名为“{name}”。', tagApplied: '已应用“{name}”标签。', tagUpdated: '已更新“{name}”标签。', deleteTagConfirm: '要删除“{name}”标签吗？已应用到项目的规则将保留。', tagDeleted: '已删除“{name}”标签。',
   extensionRequired: '请至少输入一个扩展名。', filterTextRequired: '请输入文件名条件文本。', keyLengthInvalid: '分类字符数必须至少为1。', delimiterRequired: '请输入分隔符。', compareLengthInvalid: '目标比较字符数必须至少为1。', rulesSaved: '规则已保存。', deleteProjectConfirm: '要删除“{name}”项目设置吗？不会删除任何文件。', allFiles: '所有文件', recursive: '包含子文件夹', currentFolder: '当前文件夹', extensionsUnset: '未指定扩展名', desktopMoveOnly: '文件预览和移动仅在桌面应用中可用。', scanning: '正在扫描文件…', moving: '正在移动文件。请勿关闭应用…', reviewItems: '部分项目需要检查。', moveComplete: '文件移动完成。', cancelling: '当前文件处理完成后，将在安全位置停止…', desktopHistoryOnly: '运行历史仅在桌面应用中可查看。', desktopExportOnly: '设置导出仅在桌面应用中可用。', exportTitle: '导出 MoveMgr 设置', exported: '设置已导出。', desktopImportOnly: '设置导入仅在桌面应用中可用。', importTitle: '导入 MoveMgr 设置', importModeConfirm: '选择“确定”将项目追加到当前列表。\n选择“取消”将替换现有设置。', projectsAppended: '项目已追加。', settingsReplaced: '设置已替换。',
