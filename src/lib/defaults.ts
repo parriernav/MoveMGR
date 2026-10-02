@@ -9,6 +9,7 @@ export const newProject = (language: Language = 'ko'): Project => ({
     root: '',
     recursive: false,
     includeHidden: false,
+    moveUnit: 'file',
     extensions: { mode: 'all' },
     nameFilters: []
   },

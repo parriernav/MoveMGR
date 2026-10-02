@@ -14,6 +14,8 @@ export type NameFilter = {
 
 export type MultipleMatchPolicy = 'first' | 'roundRobin' | 'skip';
 
+export type MoveUnit = 'file' | 'sameNameGroup';
+
 export type Destination =
   | { mode: 'root' }
   | { mode: 'fixedSubfolder'; relativePath: string; createIfMissing: boolean }
@@ -38,6 +40,7 @@ export type Project = {
     root: string;
     recursive: boolean;
     includeHidden: boolean;
+    moveUnit?: MoveUnit;
     extensions: ExtensionFilter;
     nameFilters: NameFilter[];
   };
@@ -47,7 +50,7 @@ export type Project = {
   conflict: 'skip' | 'renameWithNumber';
 };
 
-export type SourceRuleSnapshot = Pick<Project['source'], 'recursive' | 'includeHidden' | 'extensions' | 'nameFilters'>;
+export type SourceRuleSnapshot = Pick<Project['source'], 'recursive' | 'includeHidden' | 'moveUnit' | 'extensions' | 'nameFilters'>;
 export type TargetRuleSnapshot = Pick<Project, 'key' | 'comparisonOptions' | 'conflict'> & { destination: Destination };
 export type RuleTag =
   | { id: string; name: string; kind: 'source'; rules: SourceRuleSnapshot }

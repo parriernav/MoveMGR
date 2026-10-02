@@ -10,6 +10,7 @@ describe('project defaults', () => {
     const project = newProject();
     expect(project.checked).toBe(false);
     expect(project.source.recursive).toBe(false);
+    expect(project.source.moveUnit).toBe('file');
     expect(project.source.extensions).toEqual({ mode: 'all' });
     expect(project.target.destination).toEqual({ mode: 'root' });
     expect(project.conflict).toBe('skip');

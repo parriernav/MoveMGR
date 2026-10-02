@@ -317,6 +317,7 @@ pub fn create_plan(state: &LocalState, project_ids: &[String]) -> Result<Interna
     for (project, source_root, _) in roots {
         // Each candidate-folder group rotates independently within this project's plan.
         let mut round_robin_counts = HashMap::new();
+        let mut group_destinations: HashMap<(PathBuf, String), PathBuf> = HashMap::new();
         let walker = if project.source.recursive {
             WalkDir::new(&source_root)
         } else {
@@ -352,6 +353,13 @@ pub fn create_plan(state: &LocalState, project_ids: &[String]) -> Result<Interna
             };
             let len = metadata.len();
             let modified = modified_nanos(&metadata);
+            let source_group =
+                matches!(project.source.move_unit, MoveUnit::SameNameGroup).then(|| {
+                    (
+                        source.parent().unwrap_or(&source_root).to_path_buf(),
+                        rules::normalize(stem, project.comparison_options.ignore_case),
+                    )
+                });
             let needs_key = !matches!(
                 project.target.destination,
                 Destination::Root | Destination::FixedSubfolder { .. }
@@ -367,11 +375,18 @@ pub fn create_plan(state: &LocalState, project_ids: &[String]) -> Result<Interna
             } else {
                 None
             };
-            let selection = match target_directory(project, key.as_deref(), &round_robin_counts) {
-                Ok(value) => value,
-                Err(code) => {
-                    add_skipped(&mut items, project, &source, len, modified, key, &code);
-                    continue;
+            let selection = if let Some(directory) = source_group
+                .as_ref()
+                .and_then(|group| group_destinations.get(group))
+            {
+                TargetSelection::from(directory.clone())
+            } else {
+                match target_directory(project, key.as_deref(), &round_robin_counts) {
+                    Ok(value) => value,
+                    Err(code) => {
+                        add_skipped(&mut items, project, &source, len, modified, key, &code);
+                        continue;
+                    }
                 }
             };
             let target = match unique_target(
@@ -388,6 +403,12 @@ pub fn create_plan(state: &LocalState, project_ids: &[String]) -> Result<Interna
             // Conflicts that skip a file must not consume a folder's turn.
             if let Some(group) = selection.round_robin_group {
                 *round_robin_counts.entry(group).or_insert(0) += 1;
+            }
+            // The first movable member anchors the bundle; later members reuse its turn.
+            if let Some(group) = source_group {
+                group_destinations
+                    .entry(group)
+                    .or_insert(selection.directory);
             }
             let public = PlannedItem {
                 item_id: Uuid::new_v4().to_string(),
@@ -743,6 +764,7 @@ mod tests {
                 root: source.to_string_lossy().into_owned(),
                 recursive: false,
                 include_hidden: false,
+                move_unit: MoveUnit::File,
                 extensions: ExtensionFilter::Only {
                     values: vec!["pdf".into()],
                     include_extensionless: false,
@@ -792,6 +814,308 @@ mod tests {
             comparison: Comparison::Equals,
             no_match: NoMatch::Skip,
             multiple_matches: policy,
+        }
+    }
+
+    fn media_project(
+        source: &Path,
+        target: &Path,
+        move_unit: MoveUnit,
+        conflict: Conflict,
+    ) -> Project {
+        let mut project = project(
+            source,
+            target,
+            matching_destination(MultipleMatchPolicy::RoundRobin),
+            conflict,
+        );
+        project.source.extensions = ExtensionFilter::All;
+        project.source.move_unit = move_unit;
+        project
+    }
+
+    #[test]
+    fn same_name_media_groups_share_one_round_robin_turn_and_execute_together() {
+        for (unit, expected_folders) in [
+            (
+                MoveUnit::File,
+                [
+                    "client_a", "client_b", "client_c", "client_a", "client_b", "client_c",
+                ],
+            ),
+            (
+                MoveUnit::SameNameGroup,
+                [
+                    "client_a", "client_a", "client_a", "client_b", "client_b", "client_b",
+                ],
+            ),
+        ] {
+            let temp = TempDir::new().unwrap();
+            let source = temp.path().join("source");
+            let target = temp.path().join("target");
+            fs::create_dir_all(&source).unwrap();
+            for folder in ["client_c", "client_b", "client_a"] {
+                fs::create_dir_all(target.join(folder)).unwrap();
+            }
+            for stem in ["client_1", "client_2"] {
+                for extension in ["mp4", "txt", "png"] {
+                    let name = format!("{stem}.{extension}");
+                    fs::write(source.join(&name), name.as_bytes()).unwrap();
+                }
+            }
+            let project = media_project(&source, &target, unit, Conflict::Skip);
+            let id = project.id.clone();
+            let state = state(project);
+            let plan = create_plan(&state, &[id.clone()]).unwrap();
+            assert_eq!(plan.public.movable, 6);
+            let planned: Vec<PathBuf> = plan
+                .items
+                .iter()
+                .map(|item| item.target.clone().unwrap())
+                .collect();
+            for (path, folder) in planned.iter().zip(expected_folders) {
+                assert_eq!(path.parent().unwrap(), target.join(folder));
+            }
+            let repeated = create_plan(&state, &[id]).unwrap();
+            assert_eq!(
+                repeated
+                    .items
+                    .iter()
+                    .map(|item| item.target.clone().unwrap())
+                    .collect::<Vec<_>>(),
+                planned
+            );
+            assert_eq!(fs::read_dir(&source).unwrap().count(), 6);
+            for folder in ["client_a", "client_b", "client_c"] {
+                assert_eq!(fs::read_dir(target.join(folder)).unwrap().count(), 0);
+            }
+            let result =
+                execute_plan(plan, &temp.path().join("runs"), &AtomicBool::new(false)).unwrap();
+            assert_eq!(result.moved, 6);
+            assert_eq!(result.failed, 0);
+            assert_eq!(fs::read_dir(&source).unwrap().count(), 0);
+            for path in planned {
+                assert_eq!(
+                    fs::read(&path).unwrap(),
+                    path.file_name().unwrap().to_str().unwrap().as_bytes()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn bundles_use_the_full_name_and_reuse_destinations_for_nonadjacent_members() {
+        let temp = TempDir::new().unwrap();
+        let source = temp.path().join("source");
+        let target = temp.path().join("target");
+        fs::create_dir_all(&source).unwrap();
+        for folder in ["client_a", "client_b", "client_c"] {
+            fs::create_dir_all(target.join(folder)).unwrap();
+        }
+        for name in [
+            "client_clip",
+            "client_clip.mp4",
+            "client_clip.part.mp4",
+            "client_clip.png",
+            "client_clip.txt",
+            "client_next.mp4",
+        ] {
+            fs::write(source.join(name), b"new").unwrap();
+        }
+        let project = media_project(&source, &target, MoveUnit::SameNameGroup, Conflict::Skip);
+        let id = project.id.clone();
+        let plan = create_plan(&state(project), &[id]).unwrap();
+        assert_eq!(plan.public.movable, 6);
+        for item in plan.items {
+            let name = item.source.file_name().unwrap().to_str().unwrap();
+            let expected = match name {
+                "client_clip.part.mp4" => "client_b",
+                "client_next.mp4" => "client_c",
+                _ => "client_a",
+            };
+            assert_eq!(
+                item.target.unwrap().parent().unwrap(),
+                target.join(expected)
+            );
+        }
+    }
+
+    #[test]
+    fn identical_names_in_different_source_subfolders_are_separate_bundles() {
+        let temp = TempDir::new().unwrap();
+        let source = temp.path().join("source");
+        let target = temp.path().join("target");
+        for folder in ["client_a", "client_b"] {
+            fs::create_dir_all(target.join(folder)).unwrap();
+        }
+        for folder in ["one", "two"] {
+            fs::create_dir_all(source.join(folder)).unwrap();
+            for name in ["client_clip.mp4", "client_clip.txt"] {
+                fs::write(source.join(folder).join(name), b"new").unwrap();
+            }
+        }
+        let mut project = media_project(&source, &target, MoveUnit::SameNameGroup, Conflict::Skip);
+        project.source.recursive = true;
+        let id = project.id.clone();
+        let plan = create_plan(&state(project), &[id]).unwrap();
+        assert_eq!(plan.public.movable, 4);
+        for (item, folder) in plan
+            .items
+            .iter()
+            .zip(["client_a", "client_a", "client_b", "client_b"])
+        {
+            assert_eq!(
+                item.target.as_ref().unwrap().parent().unwrap(),
+                target.join(folder)
+            );
+        }
+    }
+
+    #[test]
+    fn grouping_respects_source_filters_and_does_not_move_excluded_sidecars() {
+        let temp = TempDir::new().unwrap();
+        let source = temp.path().join("source");
+        let target = temp.path().join("target");
+        fs::create_dir_all(&source).unwrap();
+        for folder in ["client_a", "client_b"] {
+            fs::create_dir_all(target.join(folder)).unwrap();
+        }
+        for name in [
+            "client_1.mp4",
+            "client_1.png",
+            "client_1.txt",
+            "client_2.mp4",
+            "client_other.mp4",
+        ] {
+            fs::write(source.join(name), b"new").unwrap();
+        }
+        let mut project = media_project(&source, &target, MoveUnit::SameNameGroup, Conflict::Skip);
+        project.source.extensions = ExtensionFilter::Only {
+            values: vec!["mp4".into(), "png".into()],
+            include_extensionless: false,
+        };
+        project.source.name_filters = vec![
+            NameFilter {
+                op: NameFilterOp::StartsWith,
+                value: "client_".into(),
+            },
+            NameFilter {
+                op: NameFilterOp::Contains,
+                value: "1".into(),
+            },
+        ];
+        let id = project.id.clone();
+        let plan = create_plan(&state(project), &[id]).unwrap();
+        assert_eq!(plan.public.movable, 2);
+        assert!(
+            plan.items
+                .iter()
+                .all(|item| item.target.as_ref().unwrap().parent().unwrap()
+                    == target.join("client_a"))
+        );
+        let result =
+            execute_plan(plan, &temp.path().join("runs"), &AtomicBool::new(false)).unwrap();
+        assert_eq!(result.moved, 2);
+        assert!(source.join("client_1.txt").exists());
+        assert!(source.join("client_2.mp4").exists());
+        assert!(source.join("client_other.mp4").exists());
+    }
+
+    #[test]
+    fn bundle_conflicts_do_not_consume_extra_turns_or_change_the_groups_folder() {
+        for conflict in [Conflict::Skip, Conflict::RenameWithNumber] {
+            let temp = TempDir::new().unwrap();
+            let source = temp.path().join("source");
+            let target = temp.path().join("target");
+            fs::create_dir_all(&source).unwrap();
+            for folder in ["client_a", "client_b", "client_c"] {
+                fs::create_dir_all(target.join(folder)).unwrap();
+            }
+            for name in [
+                "client_1.mp4",
+                "client_1.png",
+                "client_1.txt",
+                "client_2.mp4",
+                "client_3.mp4",
+                "client_3.txt",
+                "client_4.mp4",
+            ] {
+                fs::write(source.join(name), b"new").unwrap();
+            }
+            fs::write(target.join("client_a/client_1.mp4"), b"old").unwrap();
+            fs::write(target.join("client_a/client_1.txt"), b"old").unwrap();
+            fs::write(target.join("client_c/client_3.mp4"), b"old").unwrap();
+            fs::write(target.join("client_c/client_3.txt"), b"old").unwrap();
+            let project = media_project(&source, &target, MoveUnit::SameNameGroup, conflict);
+            let id = project.id.clone();
+            let plan = create_plan(&state(project), &[id]).unwrap();
+            let expected_last = if matches!(conflict, Conflict::Skip) {
+                "client_c"
+            } else {
+                "client_a"
+            };
+            for item in &plan.items {
+                if let Some(path) = &item.target {
+                    let stem =
+                        rules::split_file_name(item.source.file_name().unwrap().to_str().unwrap())
+                            .0;
+                    let expected = match stem {
+                        "client_1" => "client_a",
+                        "client_2" => "client_b",
+                        "client_3" => "client_c",
+                        _ => expected_last,
+                    };
+                    assert_eq!(path.parent().unwrap(), target.join(expected));
+                }
+            }
+            assert_eq!(
+                plan.public.skipped,
+                if matches!(conflict, Conflict::Skip) {
+                    4
+                } else {
+                    0
+                }
+            );
+            let result =
+                execute_plan(plan, &temp.path().join("runs"), &AtomicBool::new(false)).unwrap();
+            assert_eq!(result.failed, 0);
+            assert_eq!(
+                fs::read(target.join("client_a/client_1.mp4")).unwrap(),
+                b"old"
+            );
+        }
+    }
+
+    #[test]
+    fn bundle_names_follow_unicode_normalization_and_ignore_case() {
+        for (names, ignore_case, same_bundle) in [
+            (["client_Clip.mp4", "client_clip.txt"], true, true),
+            (["client_Clip.mp4", "client_clip.txt"], false, false),
+            (
+                ["client_\u{1100}\u{1161}.mp4", "client_가.txt"],
+                false,
+                true,
+            ),
+        ] {
+            let temp = TempDir::new().unwrap();
+            let source = temp.path().join("source");
+            let target = temp.path().join("target");
+            fs::create_dir_all(&source).unwrap();
+            for folder in ["client_a", "client_b"] {
+                fs::create_dir_all(target.join(folder)).unwrap();
+            }
+            for name in names {
+                fs::write(source.join(name), b"new").unwrap();
+            }
+            let mut project =
+                media_project(&source, &target, MoveUnit::SameNameGroup, Conflict::Skip);
+            project.comparison_options.ignore_case = ignore_case;
+            let id = project.id.clone();
+            let plan = create_plan(&state(project), &[id]).unwrap();
+            assert_eq!(plan.public.movable, 2);
+            let first = plan.items[0].target.as_ref().unwrap().parent().unwrap();
+            let second = plan.items[1].target.as_ref().unwrap().parent().unwrap();
+            assert_eq!(first == second, same_bundle);
         }
     }
 

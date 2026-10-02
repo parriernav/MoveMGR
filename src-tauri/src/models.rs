@@ -101,6 +101,14 @@ pub enum MultipleMatchPolicy {
     Skip,
 }
 
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum MoveUnit {
+    #[default]
+    File,
+    SameNameGroup,
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Conflict {
@@ -114,6 +122,8 @@ pub struct Source {
     pub root: String,
     pub recursive: bool,
     pub include_hidden: bool,
+    #[serde(default)]
+    pub move_unit: MoveUnit,
     pub extensions: ExtensionFilter,
     pub name_filters: Vec<NameFilter>,
 }
@@ -157,6 +167,8 @@ pub struct Project {
 pub struct SourceRuleSnapshot {
     pub recursive: bool,
     pub include_hidden: bool,
+    #[serde(default)]
+    pub move_unit: MoveUnit,
     pub extensions: ExtensionFilter,
     pub name_filters: Vec<NameFilter>,
 }
@@ -395,6 +407,35 @@ mod tests {
         let mut invalid = old;
         invalid["multipleMatches"] = json!("unknown");
         assert!(serde_json::from_value::<Destination>(invalid).is_err());
+    }
+
+    #[test]
+    fn source_move_units_round_trip_and_old_projects_and_tags_default_to_files() {
+        let old_rules = json!({
+            "recursive": false, "includeHidden": false,
+            "extensions": {"mode":"all"}, "nameFilters": []
+        });
+        let mut old_source = old_rules.clone();
+        old_source["root"] = json!("source");
+        let source: Source = serde_json::from_value(old_source.clone()).unwrap();
+        let rules: SourceRuleSnapshot = serde_json::from_value(old_rules.clone()).unwrap();
+        assert_eq!(serde_json::to_value(source).unwrap()["moveUnit"], "file");
+        assert_eq!(serde_json::to_value(rules).unwrap()["moveUnit"], "file");
+        for unit in ["file", "sameNameGroup"] {
+            let mut current = old_source.clone();
+            current["moveUnit"] = json!(unit);
+            let source: Source = serde_json::from_value(current.clone()).unwrap();
+            assert_eq!(serde_json::to_value(source).unwrap(), current);
+            let mut current_rules = old_rules.clone();
+            current_rules["moveUnit"] = json!(unit);
+            let rules: SourceRuleSnapshot = serde_json::from_value(current_rules.clone()).unwrap();
+            assert_eq!(serde_json::to_value(rules).unwrap(), current_rules);
+        }
+        old_source["moveUnit"] = json!("unknown");
+        assert!(serde_json::from_value::<Source>(old_source).is_err());
+        let mut invalid_rules = old_rules;
+        invalid_rules["moveUnit"] = json!("unknown");
+        assert!(serde_json::from_value::<SourceRuleSnapshot>(invalid_rules).is_err());
     }
 
     #[test]

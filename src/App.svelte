@@ -9,7 +9,7 @@
   import { applyRuleTag, normalizedTagName, snapshotRules } from './lib/rule-tags';
   import { targetSummaryLines } from './lib/rule-summary';
   import * as api from './lib/ipc';
-  import type { AppInfo, LocalState, MultipleMatchPolicy, Plan, Project, RuleTag, RunResult } from './lib/types';
+  import type { AppInfo, LocalState, MoveUnit, MultipleMatchPolicy, Plan, Project, RuleTag, RunResult } from './lib/types';
 
   let state: LocalState = structuredClone(emptyState);
   let appInfo: AppInfo = { version: '0.0.1', platform: 'desktop', configDir: '' };
@@ -341,7 +341,8 @@
   function sourceSummary(project: Project) {
     const extension = project.source.extensions.mode === 'all' ? t('allFiles') : project.source.extensions.values.map((item) => item.toUpperCase()).join(' · ');
     const recursion = project.source.recursive ? t('recursive') : t('currentFolder');
-    return `${extension || t('extensionsUnset')} · ${recursion}`;
+    const unit = t(project.source.moveUnit === 'sameNameGroup' ? 'moveByNameGroup' : 'moveByFile');
+    return `${extension || t('extensionsUnset')} · ${recursion} · ${unit}`;
   }
 
   async function preparePlan(ids = selectedIds(), executeImmediately = false) {
@@ -573,6 +574,8 @@
             <button class="text-button" onclick={() => { editing?.source.nameFilters.push({ op: 'startsWith', value: '' }); editing = structuredClone(editing); }}>＋ {t('addCondition')}</button>
           </div>
         </fieldset>
+        <label class="field"><span>{t('moveUnit')}</span><select value={editing.source.moveUnit ?? 'file'} onchange={(event) => { if (!editing) return; editing.source.moveUnit = event.currentTarget.value as MoveUnit; editing = structuredClone(editing); }}><option value="file">{t('moveByFile')}</option><option value="sameNameGroup">{t('moveByNameGroup')}</option></select></label>
+        <p class="field-help">{t('moveUnitHelp')}</p>
       </div>
       <footer class="modal-actions"><button onclick={() => (dialog = null)}>{t('cancel')}</button><button class="primary" onclick={saveRules}>{t('saveSourceRules')}</button></footer>
     </div>

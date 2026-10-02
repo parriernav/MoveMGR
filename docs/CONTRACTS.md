@@ -14,6 +14,8 @@ Each project contains:
 
 Settings are UTF-8 JSON. Writes use revision checks so stale windows cannot overwrite newer state. Imports validate the schema and every project before replacing or appending data.
 
+Source rules include `moveUnit`: `file` (default) or `sameNameGroup`. This field also belongs to source rule tags, with older settings and tags defaulting to `file`. In group mode, eligible files are identified by their source parent folder and full extensionless name normalized with NFC and the comparison ignore-case option. The first member planned to move reserves the group's destination and consumes one round-robin turn. Other members reuse that destination without advancing the counter, even when unrelated filenames appear between members in source order. Source filters, filename conflicts, execution failures, and cancellation remain per file. Unknown move units are rejected.
+
 The `matchSubfolder` destination includes `multipleMatches`: `first`, `roundRobin`, or `skip`, presented in that order. New rules and missing values in older projects and rule tags default to `first`; explicitly saved policies are preserved and unknown policy values are rejected. Matching folders use deterministic name order. Round-robin counters are scoped to a project's plan and its ordered matching-folder group, and advance only for items planned to move. Planning and example evaluation select the first folder for the first turn. Execution retains planned destinations.
 
 ## Planning

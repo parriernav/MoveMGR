@@ -6,8 +6,8 @@ export function snapshotRules(project: Project, kind: 'source'): SourceRuleSnaps
 export function snapshotRules(project: Project, kind: 'target'): TargetRuleSnapshot;
 export function snapshotRules(project: Project, kind: RuleKind): SourceRuleSnapshot | TargetRuleSnapshot {
   if (kind === 'source') {
-    const { recursive, includeHidden, extensions, nameFilters } = project.source;
-    return structuredClone({ recursive, includeHidden, extensions, nameFilters });
+    const { recursive, includeHidden, moveUnit = 'file', extensions, nameFilters } = project.source;
+    return structuredClone({ recursive, includeHidden, moveUnit, extensions, nameFilters });
   }
   return structuredClone({
     key: project.key,
@@ -20,7 +20,7 @@ export function snapshotRules(project: Project, kind: RuleKind): SourceRuleSnaps
 export function applyRuleTag(project: Project, tag: RuleTag): Project {
   const next = structuredClone(project);
   if (tag.kind === 'source') {
-    Object.assign(next.source, structuredClone(tag.rules));
+    Object.assign(next.source, { moveUnit: 'file', ...structuredClone(tag.rules) });
   } else {
     const rules = structuredClone(tag.rules);
     next.key = rules.key;

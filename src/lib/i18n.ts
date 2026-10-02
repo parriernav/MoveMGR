@@ -67,6 +67,8 @@ const en = {
   multipleMatchesSkip: 'Skip', multipleMatchesFirst: 'Send all to the first folder', multipleMatchesRoundRobin: 'Distribute evenly in turn',
   multipleMatchesHelp: 'Folders are ordered by name. Rotation restarts for each project plan and matching folder group; skipped files do not consume a turn.',
   summaryMultipleMatches: 'Multiple matches: {policy}',
+  moveUnit: 'Move unit', moveByFile: 'Individual files', moveByNameGroup: 'Files with the same name as a group',
+  moveUnitHelp: 'Group files in the same source folder by name without the extension, such as clip.mp4, clip.txt, and clip.png. Files passing the source filters share one destination, and round-robin distribution advances once per group. The target ignore-case setting also applies to grouping.',
   reasonKeyTooShort: 'The name is shorter than the required length.', reasonDelimiterMissing: 'The name does not contain the delimiter.', reasonEmptyKey: 'The key is empty.',
   reasonNoTarget: 'No matching subfolder was found.', reasonAmbiguousTarget: 'More than one subfolder matched.', reasonInvalidTarget: 'The key cannot be used as a folder name.',
   reasonTargetExists: 'A file with the same name already exists.', reasonTargetFolderMissing: 'The destination subfolder does not exist.',
@@ -83,6 +85,8 @@ export type MessageKey = keyof typeof en;
 
 const ko: Record<MessageKey, string> = {
   ...en,
+  moveUnit: '이동 단위', moveByFile: '파일 단위', moveByNameGroup: '같은 파일명 묶음 단위',
+  moveUnitHelp: '같은 소스 폴더의 clip.mp4, clip.txt, clip.png처럼 확장자를 제외한 이름으로 묶습니다. 소스 조건을 통과한 파일은 같은 목적지로 이동하고, 균등 배분 차례는 묶음마다 한 번만 넘어갑니다. 타겟의 대소문자 무시 설정도 적용됩니다.',
   whenMultipleMatches: '일치하는 폴더가 여러 개일 때',
   multipleMatchesSkip: '건너뛰기', multipleMatchesFirst: '첫 번째 폴더에 모으기', multipleMatchesRoundRobin: '순서대로 균등 배분',
   multipleMatchesHelp: '폴더 이름순으로 선택합니다. 순환은 프로젝트의 이동 계획마다 일치 폴더 그룹별로 처음부터 시작하며, 건너뛴 파일은 차례를 소비하지 않습니다.',
@@ -98,6 +102,8 @@ const ko: Record<MessageKey, string> = {
 
 const ja: Record<MessageKey, string> = {
   ...en,
+  moveUnit: '移動単位', moveByFile: 'ファイル単位', moveByNameGroup: '同じ名前のファイルをまとめる',
+  moveUnitHelp: '同じソースフォルダーの clip.mp4、clip.txt、clip.png のように、拡張子を除いた名前でまとめます。ソース条件に一致したファイルは同じ保存先へ移動し、均等な振り分けの順番はグループごとに一度だけ進みます。ターゲットの大文字と小文字を無視する設定も適用されます。',
   whenMultipleMatches: '複数のフォルダーが一致する場合',
   multipleMatchesSkip: 'スキップ', multipleMatchesFirst: '最初のフォルダーにまとめる', multipleMatchesRoundRobin: '順番に均等に振り分ける',
   multipleMatchesHelp: 'フォルダー名順に選択します。各プロジェクトの移動計画で、一致するフォルダー群ごとに最初から循環します。スキップしたファイルは順番を進めません。',
@@ -112,6 +118,8 @@ const ja: Record<MessageKey, string> = {
 
 const zh: Record<MessageKey, string> = {
   ...en,
+  moveUnit: '移动单位', moveByFile: '单个文件', moveByNameGroup: '按相同文件名分组',
+  moveUnitHelp: '将同一源文件夹中的 clip.mp4、clip.txt、clip.png 等按不含扩展名的名称分组。满足源条件的文件移动到同一位置，轮流分配时每组只占一个轮次。分组也使用目标的忽略大小写设置。',
   whenMultipleMatches: '多个文件夹匹配时',
   multipleMatchesSkip: '跳过', multipleMatchesFirst: '全部放入第一个文件夹', multipleMatchesRoundRobin: '依次均匀分配',
   multipleMatchesHelp: '按文件夹名称排序。每个项目的移动计划按匹配文件夹组从头轮流分配；跳过的文件不会占用轮次。',
