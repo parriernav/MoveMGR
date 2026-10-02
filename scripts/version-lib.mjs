@@ -4,6 +4,7 @@ import { extname, join, relative } from 'node:path';
 
 const root = new URL('../', import.meta.url).pathname.replace(/^\/(?:([A-Za-z]:))/, '$1');
 const versionPath = join(root, 'version.json');
+const textExtensions = new Set(['.css', '.html', '.js', '.json', '.lock', '.md', '.mjs', '.ps1', '.py', '.rs', '.svelte', '.svg', '.toml', '.ts', '.txt', '.yaml', '.yml']);
 
 function walk(directory) {
   if (!existsSync(directory)) return [];
@@ -14,14 +15,17 @@ function walk(directory) {
   });
 }
 
-export function digestSources() {
+export function digestSources(projectRoot = root) {
   const explicit = ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'vite.config.ts', 'vitest.config.ts', 'tsconfig.json', '.gitattributes', 'index.html', 'design/movemgr-icon.svg', 'src-tauri/Cargo.toml', 'src-tauri/Cargo.lock', 'src-tauri/tauri.conf.json', 'src-tauri/build.rs'];
   const roots = ['src', 'src-tauri/src', 'src-tauri/capabilities', 'scripts', 'portable', '.github/workflows'];
-  const files = [...explicit.map((path) => join(root, path)), ...roots.flatMap((path) => walk(join(root, path)))].filter(existsSync).sort();
+  const files = [...explicit.map((path) => join(projectRoot, path)), ...roots.flatMap((path) => walk(join(projectRoot, path)))].filter(existsSync).sort();
   const hash = createHash('sha256');
   for (const file of files) {
     let content = readFileSync(file);
-    const rel = relative(root, file).replaceAll('\\', '/');
+    const rel = relative(projectRoot, file).replaceAll('\\', '/');
+    if (rel === '.gitattributes' || textExtensions.has(extname(file).toLowerCase())) {
+      content = Buffer.from(content.toString('utf8').replace(/\r\n/g, '\n'), 'utf8');
+    }
     if (rel === 'package.json') {
       const json = JSON.parse(content.toString('utf8'));
       json.version = '<VERSION>';

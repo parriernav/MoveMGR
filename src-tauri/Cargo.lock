@@ -2047,7 +2047,7 @@ dependencies = [
 
 [[package]]
 name = "movemgr"
-version = "0.0.26"
+version = "0.0.27"
 dependencies = [
  "chrono",
  "hex",

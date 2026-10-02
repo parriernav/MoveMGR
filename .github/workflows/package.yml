@@ -38,7 +38,13 @@ jobs:
       - run: node scripts/prepare-build.mjs
       - run: pnpm version:check
       - run: pnpm tauri build --target universal-apple-darwin --bundles app
+      - name: Package macOS app with executable permissions
+        shell: bash
+        run: |
+          movemgr_version=$(node -p "JSON.parse(require('fs').readFileSync('version.json', 'utf8')).version")
+          mkdir -p artifacts
+          ditto -c -k --sequesterRsrc --keepParent src-tauri/target/universal-apple-darwin/release/bundle/macos/MoveMgr.app "artifacts/MoveMgr-macos-portable-v${movemgr_version}.zip"
       - uses: actions/upload-artifact@v4
         with:
           name: MoveMgr-macos-portable
-          path: src-tauri/target/universal-apple-darwin/release/bundle/macos/MoveMgr.app
+          path: artifacts/MoveMgr-macos-portable-v*.zip

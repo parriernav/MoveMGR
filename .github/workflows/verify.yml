@@ -15,6 +15,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
       - run: pnpm test
+      - run: node --test scripts/version-lib.test.mjs
       - run: pnpm build
       - run: pnpm version:check
   rust:
