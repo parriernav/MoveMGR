@@ -7,12 +7,14 @@
 Each project contains:
 
 - a stable UUID and display name;
-- source root, recursion, hidden-file, extension, and filename filters;
+- ordered source roots, recursion, hidden-file, extension, and filename filters;
 - classification-key extraction and comparison options;
 - target root and destination strategy;
 - same-name conflict policy.
 
 Settings are UTF-8 JSON. Writes use revision checks so stale windows cannot overwrite newer state. Imports validate the schema and every project before replacing or appending data.
+
+Source folders are stored in `source.roots`, an ordered string array. Legacy `source.root` values load as a single-entry list (or an empty list for an unset folder); saves and exports use `roots`. An explicit list takes precedence over a legacy field. An empty list is allowed for an incomplete project but cannot run. Every source is checked for overlap with other sources and targets before planning. Folders are scanned in list order, with deterministic relative-path order inside each folder; conflict reservations and round-robin counters span all folders within the project. Rule tags do not include folder paths.
 
 Source rules include `moveUnit`: `file` (default) or `sameNameGroup`. This field also belongs to source rule tags, with older settings and tags defaulting to `file`. In group mode, eligible files are identified by their source parent folder and full extensionless name normalized with NFC and the comparison ignore-case option. The first member planned to move reserves the group's destination and consumes one round-robin turn. Other members reuse that destination without advancing the counter, even when unrelated filenames appear between members in source order. Source filters, filename conflicts, execution failures, and cancellation remain per file. Unknown move units are rejected.
 

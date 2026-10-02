@@ -125,16 +125,23 @@ h2 { margin-bottom: 6px; font-size: 17px; line-height: 1.35; letter-spacing: -.2
 .run-cell { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 9px 8px; }
 .check { flex: 0 0 auto; }
 .play { width: 34px; min-height: 34px; height: 34px; padding: 0; border-radius: 7px; color: var(--accent); }
-.name-cell { position: relative; display: flex; align-items: center; padding: 7px 9px; }
+.name-cell { display: flex; flex-direction: column; align-items: stretch; justify-content: center; gap: 4px; padding: 9px; }
 .inline-name-input { min-height: 36px; padding: 6px 8px; font-size: 13px; font-weight: 700; }
-.required { position: absolute; right: 8px; top: 4px; padding: 1px 5px; border-radius: 4px; background: var(--warning-soft); color: var(--warning); font-size: 9px; font-weight: 700; }
+.required { align-self: flex-start; padding: 1px 5px; border-radius: 4px; background: var(--warning-soft); color: var(--warning); font-size: 9px; font-weight: 700; }
 .board-cell-button { width: 100%; min-height: 71px; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; padding: 8px 10px; border: 0; border-radius: 0; background: transparent; text-align: left; }
 .board-cell-button:hover:not(:disabled) { border-color: transparent; background: color-mix(in srgb, var(--accent-soft) 75%, transparent); }
 .board-cell-button strong, .board-cell-button span { width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .board-cell-button strong { color: var(--text); font-size: 12px; }
 .board-cell-button span { color: var(--muted); font-size: 11px; }
 .target-rules-button span { overflow: visible; text-overflow: clip; white-space: normal; overflow-wrap: anywhere; line-height: 1.3; }
-.name-button strong { padding-right: 50px; font-size: 13px; }
+.name-button { min-height: 0; padding: 6px 1px; }
+.name-button strong { font-size: 13px; overflow: visible; text-overflow: clip; white-space: normal; overflow-wrap: anywhere; line-height: 1.4; }
+.source-folders-cell { display: flex; flex-direction: column; justify-content: center; gap: 5px; padding: 9px 10px; }
+.source-folders-cell.missing { background: color-mix(in srgb, var(--warning-soft) 78%, var(--surface)); }
+.source-folder-row { display: flex; align-items: flex-start; gap: 4px; min-width: 0; }
+.source-folder-remove { flex: 0 0 24px; width: 24px; min-height: 26px; padding: 0; border-color: transparent; background: transparent; font-size: 18px; line-height: 1; }
+.source-folder-path { flex: 1; min-width: 0; min-height: 26px; padding: 4px 3px; border-color: transparent; background: transparent; text-align: left; font-size: 11px; overflow-wrap: anywhere; line-height: 1.4; }
+.source-folder-add { align-self: flex-start; min-height: 28px; padding: 3px 6px; border-color: transparent; background: transparent; color: var(--accent); font-size: 11px; }
 .board-cell-button.missing { background: color-mix(in srgb, var(--warning-soft) 78%, var(--surface)); }
 .board-cell-button.missing strong, .board-cell-button.missing span { color: var(--warning); }
 .row-actions { display: grid; grid-template-columns: repeat(2, 34px); place-content: center; gap: 2px; padding: 5px; }
@@ -259,6 +266,9 @@ td small { display: block; margin-top: 4px; color: var(--muted); }
   .board-cell-button strong { font-size: 13px; }
   .board-cell-button span { font-size: 12px; }
   .name-button strong { font-size: 14px; }
+  .name-button { min-height: 0; padding: 6px 1px; }
+  .source-folders-cell { padding: 10px 13px; }
+  .source-folder-path, .source-folder-add { font-size: 12px; }
   .row-actions { grid-template-columns: repeat(2, 36px); gap: 3px; }
   .icon-button { width: 36px; min-height: 36px; }
   .selection-hint, .statusbar, .selection-tools span { font-size: 13px; }

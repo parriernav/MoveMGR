@@ -37,7 +37,7 @@ export type Project = {
   name: string;
   checked: boolean;
   source: {
-    root: string;
+    roots: string[];
     recursive: boolean;
     includeHidden: boolean;
     moveUnit?: MoveUnit;

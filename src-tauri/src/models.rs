@@ -117,15 +117,54 @@ pub enum Conflict {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[serde(rename_all = "camelCase", try_from = "SourceSettings")]
 pub struct Source {
-    pub root: String,
+    pub roots: Vec<String>,
     pub recursive: bool,
     pub include_hidden: bool,
     #[serde(default)]
     pub move_unit: MoveUnit,
     pub extensions: ExtensionFilter,
     pub name_filters: Vec<NameFilter>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct SourceSettings {
+    roots: Option<Vec<String>>,
+    root: Option<String>,
+    recursive: bool,
+    include_hidden: bool,
+    #[serde(default)]
+    move_unit: MoveUnit,
+    extensions: ExtensionFilter,
+    name_filters: Vec<NameFilter>,
+}
+
+impl TryFrom<SourceSettings> for Source {
+    type Error = String;
+
+    fn try_from(settings: SourceSettings) -> Result<Self, Self::Error> {
+        let roots = match settings.roots {
+            Some(roots) => roots,
+            None => {
+                let root = settings.root.ok_or("소스 폴더 설정이 없습니다.")?;
+                if root.trim().is_empty() {
+                    vec![]
+                } else {
+                    vec![root]
+                }
+            }
+        };
+        Ok(Self {
+            roots,
+            recursive: settings.recursive,
+            include_hidden: settings.include_hidden,
+            move_unit: settings.move_unit,
+            extensions: settings.extensions,
+            name_filters: settings.name_filters,
+        })
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -410,6 +449,35 @@ mod tests {
     }
 
     #[test]
+    fn source_folder_lists_round_trip_and_legacy_single_folders_migrate() {
+        let rules = json!({
+            "recursive": false, "includeHidden": false, "moveUnit": "file",
+            "extensions": {"mode": "all"}, "nameFilters": []
+        });
+        for (root, expected) in [("E:/source", vec!["E:/source"]), ("", vec![])] {
+            let mut legacy = rules.clone();
+            legacy["root"] = json!(root);
+            let source: Source = serde_json::from_value(legacy).unwrap();
+            assert_eq!(source.roots, expected);
+            let encoded = serde_json::to_value(source).unwrap();
+            assert!(encoded.get("root").is_none());
+            assert_eq!(encoded["roots"], json!(expected));
+        }
+        let mut current = rules.clone();
+        current["roots"] = json!(["E:/source", "F:/source"]);
+        let source: Source = serde_json::from_value(current.clone()).unwrap();
+        assert_eq!(serde_json::to_value(source).unwrap(), current);
+        current["roots"] = json!([]);
+        current["root"] = json!("stale legacy folder");
+        let source: Source = serde_json::from_value(current).unwrap();
+        assert!(source.roots.is_empty());
+        assert!(serde_json::from_value::<Source>(rules.clone()).is_err());
+        let mut invalid = rules;
+        invalid["roots"] = json!("not an array");
+        assert!(serde_json::from_value::<Source>(invalid).is_err());
+    }
+
+    #[test]
     fn source_move_units_round_trip_and_old_projects_and_tags_default_to_files() {
         let old_rules = json!({
             "recursive": false, "includeHidden": false,
@@ -423,6 +491,8 @@ mod tests {
         assert_eq!(serde_json::to_value(rules).unwrap()["moveUnit"], "file");
         for unit in ["file", "sameNameGroup"] {
             let mut current = old_source.clone();
+            current.as_object_mut().unwrap().remove("root");
+            current["roots"] = json!(["source"]);
             current["moveUnit"] = json!(unit);
             let source: Source = serde_json::from_value(current.clone()).unwrap();
             assert_eq!(serde_json::to_value(source).unwrap(), current);

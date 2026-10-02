@@ -8,6 +8,7 @@
   import { nextPlanSort, sortedPlanItems, type PlanSort, type PlanSortKey } from './lib/plan-sort';
   import { applyRuleTag, normalizedTagName, snapshotRules } from './lib/rule-tags';
   import { targetSummaryLines } from './lib/rule-summary';
+  import { mergeSourceFolders, migrateSourceFolders } from './lib/source-folders';
   import * as api from './lib/ipc';
   import type { AppInfo, LocalState, MoveUnit, MultipleMatchPolicy, Plan, Project, RuleTag, RunResult } from './lib/types';
 
@@ -15,6 +16,7 @@
   let appInfo: AppInfo = { version: '0.0.1', platform: 'desktop', configDir: '' };
   let loading = true;
   let busy = false;
+  let choosingFolder = false;
   let saved = true;
   let message = '';
   let error = '';
@@ -42,7 +44,7 @@
   const projectIssues = (project: Project) => {
     const issues: string[] = [];
     if (!project.name.trim()) issues.push(t('projectName'));
-    if (!project.source.root.trim()) issues.push(t('sourceFolder'));
+    if (!project.source.roots.length || project.source.roots.some((root) => !root.trim())) issues.push(t('sourceFolder'));
     if (!project.target.root.trim()) issues.push(t('targetFolder'));
     if (project.source.extensions.mode === 'only' && project.source.extensions.values.length === 0) issues.push(t('extensions'));
     if (project.source.nameFilters.some((filter) => !filter.value.trim())) issues.push(t('filenameCondition'));
@@ -72,7 +74,7 @@
         [state, appInfo] = await Promise.all([api.loadState(), api.getAppInfo()]);
       } else {
         const cached = localStorage.getItem('movemgr-preview-state');
-        if (cached) state = JSON.parse(cached);
+        if (cached) state = migrateSourceFolders(JSON.parse(cached));
         message = t('browserPreview');
       }
       applyTheme();
@@ -171,17 +173,42 @@
     }
   }
 
-  async function chooseProjectFolder(project: Project, side: 'source' | 'target') {
+  async function chooseProjectFolder(project: Project, side: 'source' | 'target', sourceIndex?: number) {
+    if (busy || choosingFolder) return;
     if (!api.isTauri()) return showError(t('desktopFolderOnly'));
-    const selected = await open(projectFolderDialogOptions(project, side));
-    if (typeof selected === 'string') {
+    choosingFolder = true;
+    try {
+      const selected = await open({ ...projectFolderDialogOptions(project, side, sourceIndex), title: t(side === 'source' ? 'chooseSourceFolder' : 'chooseTargetFolder') });
+      if (!selected) return;
       const next = structuredClone(state);
       const changed = next.projects.find((item) => item.id === project.id);
       if (!changed) return;
-      if (side === 'source') changed.source.root = selected;
-      else changed.target.root = selected;
+      if (side === 'source') changed.source.roots = mergeSourceFolders(changed.source.roots, typeof selected === 'string' ? [selected] : selected, sourceIndex);
+      else if (typeof selected === 'string') changed.target.root = selected;
+      else return;
       await persist(next);
       message = t('folderChanged', { side: t(side) });
+    } catch (cause) {
+      showError(cause);
+    } finally {
+      choosingFolder = false;
+    }
+  }
+
+  async function removeSourceFolder(project: Project, index: number) {
+    if (busy || choosingFolder) return;
+    const next = structuredClone(state);
+    const changed = next.projects.find((item) => item.id === project.id);
+    if (!changed) return;
+    changed.source.roots.splice(index, 1);
+    choosingFolder = true;
+    try {
+      await persist(next);
+      message = t('sourceFolderRemoved');
+    } catch (cause) {
+      showError(cause);
+    } finally {
+      choosingFolder = false;
     }
   }
 
@@ -528,11 +555,19 @@
                 {#if renamingId === project.id}
                   <input id={`project-name-${project.id}`} class="inline-name-input" bind:value={renameValue} maxlength="80" aria-label={t('projectNameAria')} onblur={() => commitRename(project.id)} onkeydown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commitRename(project.id); } else if (event.key === 'Escape') renamingId = null; }} />
                 {:else}
-                  <button class="board-cell-button name-button" title={t('renameProject')} onclick={() => startRename(project)}><strong>{project.name}</strong><span>{t('clickToRename')}</span></button>
+                  <button class="board-cell-button name-button" title={project.name} aria-label={`${t('renameProject')}: ${project.name}`} onclick={() => startRename(project)}><strong>{project.name}</strong><span>{t('clickToRename')}</span></button>
                 {/if}
                 {#if !projectReady(project)}<small class="required">{t('setupNeeded')}</small>{/if}
               </div>
-              <button class:missing={!project.source.root} class="board-cell-button" title={project.source.root || t('chooseSourceFolder')} disabled={busy} onclick={() => chooseProjectFolder(project, 'source')}><strong>{project.source.root ? t('sourceFolder') : t('notSet')}</strong><span>{project.source.root || t('clickToChoose')}</span></button>
+              <div class:missing={!project.source.roots.length} class="source-folders-cell">
+                {#each project.source.roots as root, sourceIndex}
+                  <div class="source-folder-row">
+                    <button class="source-folder-remove danger-text" title={t('removeSourceFolder', { path: root })} aria-label={t('removeSourceFolder', { path: root })} disabled={busy || choosingFolder} onclick={() => removeSourceFolder(project, sourceIndex)}><span aria-hidden="true">×</span></button>
+                    <button class="source-folder-path" title={root} aria-label={`${t('chooseSourceFolder')}: ${root}`} disabled={busy || choosingFolder} onclick={() => chooseProjectFolder(project, 'source', sourceIndex)}>{root}</button>
+                  </div>
+                {/each}
+                <button class="source-folder-add" title={t('chooseSourceFolder')} disabled={busy || choosingFolder} onclick={() => chooseProjectFolder(project, 'source')}><span aria-hidden="true">＋</span> {t('addSourceFolders')}</button>
+              </div>
               <button class="board-cell-button" title={t('editSourceRules')} disabled={busy} onclick={() => openRules(project, 'sourceRules')}><strong>{t('sourceRules')}</strong><span>{sourceSummary(project)}</span></button>
               <button class:missing={!project.target.root} class="board-cell-button" title={project.target.root || t('chooseTargetFolder')} disabled={busy} onclick={() => chooseProjectFolder(project, 'target')}><strong>{project.target.root ? t('targetFolder') : t('notSet')}</strong><span>{project.target.root || t('clickToChoose')}</span></button>
               <button class="board-cell-button target-rules-button" title={targetSummaryLines(project, state.preferences.language).join('\n')} disabled={busy} onclick={() => openRules(project, 'targetRules')}><strong>{t('targetRules')}</strong>{#each targetSummaryLines(project, state.preferences.language) as line}<span>{line}</span>{/each}</button>

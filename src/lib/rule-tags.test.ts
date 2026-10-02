@@ -6,7 +6,7 @@ import type { RuleTag } from './types';
 describe('rule tags', () => {
   it('applies only source conditions and preserves the project paths', () => {
     const project = newProject();
-    project.source.root = 'source';
+    project.source.roots = ['source', 'another source'];
     project.target.root = 'target';
     project.source.moveUnit = 'sameNameGroup';
     const tag: RuleTag = {
@@ -16,7 +16,7 @@ describe('rule tags', () => {
       rules: { recursive: true, includeHidden: false, extensions: { mode: 'only', values: ['jpg'], includeExtensionless: false }, nameFilters: [] }
     };
     const applied = applyRuleTag(project, tag);
-    expect(applied.source.root).toBe('source');
+    expect(applied.source.roots).toEqual(['source', 'another source']);
     expect(applied.target.root).toBe('target');
     expect(applied.source.extensions).toEqual(tag.rules.extensions);
     expect(applied.source.moveUnit).toBe('file');
@@ -25,7 +25,7 @@ describe('rule tags', () => {
 
   it('saves and applies the source move unit without changing target rules', () => {
     const project = newProject();
-    project.source.root = 'source';
+    project.source.roots = ['source', 'another source'];
     project.target.root = 'target';
     project.source.moveUnit = 'sameNameGroup';
     const saved = snapshotRules(project, 'source');
@@ -33,7 +33,7 @@ describe('rule tags', () => {
     expect(saved.moveUnit).toBe('sameNameGroup');
     const applied = applyRuleTag(project, { id: crypto.randomUUID(), name: '파일명 묶음', kind: 'source', rules: saved });
     expect(applied.source.moveUnit).toBe('sameNameGroup');
-    expect(applied.source.root).toBe('source');
+    expect(applied.source.roots).toEqual(['source', 'another source']);
     expect(applied.target).toEqual(project.target);
     expect(project.source.moveUnit).toBe('file');
   });

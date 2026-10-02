@@ -278,7 +278,14 @@ pub fn create_plan(state: &LocalState, project_ids: &[String]) -> Result<Interna
     }
     for project in &selected {
         rules::validate_project(project)?;
-        if project.source.root.trim().is_empty() || project.target.root.trim().is_empty() {
+        if project.source.roots.is_empty()
+            || project
+                .source
+                .roots
+                .iter()
+                .any(|root| root.trim().is_empty())
+            || project.target.root.trim().is_empty()
+        {
             return Err(format!(
                 "‘{}’의 소스와 타겟 폴더를 지정해주세요.",
                 project.name
@@ -286,27 +293,49 @@ pub fn create_plan(state: &LocalState, project_ids: &[String]) -> Result<Interna
         }
     }
 
-    let roots: Vec<(&Project, PathBuf, PathBuf)> = selected
+    let roots: Vec<(&Project, Vec<PathBuf>, PathBuf)> = selected
         .iter()
         .map(|project| {
-            let source = canonical_existing(Path::new(&project.source.root))?;
             let target = canonical_existing(Path::new(&project.target.root))?;
-            if roots_overlap(&source, &target) {
-                return Err(format!("‘{}’의 소스와 타겟 범위가 겹칩니다.", project.name));
+            let mut sources: Vec<PathBuf> = Vec::new();
+            for root in &project.source.roots {
+                let source = canonical_existing(Path::new(root))?;
+                if roots_overlap(&source, &target) {
+                    return Err(format!("‘{}’의 소스와 타겟 범위가 겹칩니다.", project.name));
+                }
+                if sources
+                    .iter()
+                    .any(|previous| roots_overlap(previous, &source))
+                {
+                    return Err(format!("‘{}’의 소스 폴더 범위가 겹칩니다.", project.name));
+                }
+                sources.push(source);
             }
-            Ok((*project, source, target))
+            Ok((*project, sources, target))
         })
         .collect::<Result<_, String>>()?;
 
     for i in 0..roots.len() {
         for j in (i + 1)..roots.len() {
-            if roots_overlap(&roots[i].1, &roots[j].1) {
+            if roots[i]
+                .1
+                .iter()
+                .any(|a| roots[j].1.iter().any(|b| roots_overlap(a, b)))
+            {
                 return Err(format!(
                     "‘{}’와 ‘{}’의 소스 범위가 겹칩니다.",
                     roots[i].0.name, roots[j].0.name
                 ));
             }
-            if roots_overlap(&roots[i].2, &roots[j].1) || roots_overlap(&roots[j].2, &roots[i].1) {
+            if roots[j]
+                .1
+                .iter()
+                .any(|source| roots_overlap(&roots[i].2, source))
+                || roots[i]
+                    .1
+                    .iter()
+                    .any(|source| roots_overlap(&roots[j].2, source))
+            {
                 return Err("한 프로젝트의 타겟이 다른 프로젝트의 소스와 겹칩니다.".into());
             }
         }
@@ -314,31 +343,41 @@ pub fn create_plan(state: &LocalState, project_ids: &[String]) -> Result<Interna
 
     let mut reserved = HashSet::new();
     let mut items = vec![];
-    for (project, source_root, _) in roots {
+    for (project, source_roots, _) in roots {
         // Each candidate-folder group rotates independently within this project's plan.
         let mut round_robin_counts = HashMap::new();
         let mut group_destinations: HashMap<(PathBuf, String), PathBuf> = HashMap::new();
-        let walker = if project.source.recursive {
-            WalkDir::new(&source_root)
-        } else {
-            WalkDir::new(&source_root).max_depth(1)
-        };
-        let mut paths: Vec<PathBuf> = walker
-            .follow_links(false)
-            .into_iter()
-            .filter_entry(|entry| {
-                project.source.include_hidden || entry.depth() == 0 || !hidden(entry)
-            })
-            .filter_map(Result::ok)
-            .filter(|entry| {
-                entry.depth() > 0 && entry.file_type().is_file() && !entry.file_type().is_symlink()
-            })
-            .map(|entry| entry.into_path())
-            .collect();
-        paths.sort_by_key(|path| {
-            normalized_path_key(path.strip_prefix(&source_root).unwrap_or(path))
-        });
-        for source in paths {
+        let mut paths = Vec::new();
+        for source_root in source_roots {
+            let walker = if project.source.recursive {
+                WalkDir::new(&source_root)
+            } else {
+                WalkDir::new(&source_root).max_depth(1)
+            };
+            let mut source_paths: Vec<PathBuf> = walker
+                .follow_links(false)
+                .into_iter()
+                .filter_entry(|entry| {
+                    project.source.include_hidden || entry.depth() == 0 || !hidden(entry)
+                })
+                .filter_map(Result::ok)
+                .filter(|entry| {
+                    entry.depth() > 0
+                        && entry.file_type().is_file()
+                        && !entry.file_type().is_symlink()
+                })
+                .map(|entry| entry.into_path())
+                .collect();
+            source_paths.sort_by_key(|path| {
+                normalized_path_key(path.strip_prefix(&source_root).unwrap_or(path))
+            });
+            paths.extend(
+                source_paths
+                    .into_iter()
+                    .map(|path| (path, source_root.clone())),
+            );
+        }
+        for (source, source_root) in paths {
             let file_name = match source.file_name().and_then(|value| value.to_str()) {
                 Some(value) => value,
                 None => continue,
@@ -761,7 +800,7 @@ mod tests {
             name: "테스트 프로젝트".into(),
             checked: true,
             source: Source {
-                root: source.to_string_lossy().into_owned(),
+                roots: vec![source.to_string_lossy().into_owned()],
                 recursive: false,
                 include_hidden: false,
                 move_unit: MoveUnit::File,
@@ -832,6 +871,140 @@ mod tests {
         project.source.extensions = ExtensionFilter::All;
         project.source.move_unit = move_unit;
         project
+    }
+
+    #[test]
+    fn multiple_source_roots_share_round_robin_turns_and_execute() {
+        let temp = TempDir::new().unwrap();
+        let target = temp.path().join("target");
+        let sources = [temp.path().join("source-b"), temp.path().join("source-a")];
+        for folder in ["client_a", "client_b"] {
+            fs::create_dir_all(target.join(folder)).unwrap();
+        }
+        for (index, source) in sources.iter().enumerate() {
+            fs::create_dir_all(source).unwrap();
+            fs::write(
+                source.join(format!("client_{index}.pdf")),
+                format!("file {index}"),
+            )
+            .unwrap();
+            fs::write(source.join("excluded.txt"), b"keep").unwrap();
+        }
+        let mut project = project(
+            &sources[0],
+            &target,
+            matching_destination(MultipleMatchPolicy::RoundRobin),
+            Conflict::Skip,
+        );
+        project
+            .source
+            .roots
+            .push(sources[1].to_string_lossy().into_owned());
+        let id = project.id.clone();
+        let plan = create_plan(&state(project), &[id]).unwrap();
+        assert_eq!(plan.public.movable, 2);
+        for (index, item) in plan.items.iter().enumerate() {
+            assert_eq!(
+                item.source.parent().unwrap(),
+                sources[index].canonicalize().unwrap()
+            );
+            assert_eq!(
+                item.target.as_ref().unwrap().parent().unwrap(),
+                target.join(if index == 0 { "client_a" } else { "client_b" })
+            );
+            assert!(item.source.exists());
+            assert!(!item.target.as_ref().unwrap().exists());
+        }
+        let result =
+            execute_plan(plan, &temp.path().join("runs"), &AtomicBool::new(false)).unwrap();
+        assert_eq!(result.moved, 2);
+        assert_eq!(result.failed, 0);
+        for (index, source) in sources.iter().enumerate() {
+            assert!(!source.join(format!("client_{index}.pdf")).exists());
+            assert_eq!(fs::read(source.join("excluded.txt")).unwrap(), b"keep");
+            let folder = if index == 0 { "client_a" } else { "client_b" };
+            assert_eq!(
+                fs::read(target.join(folder).join(format!("client_{index}.pdf"))).unwrap(),
+                format!("file {index}").as_bytes()
+            );
+        }
+    }
+
+    #[test]
+    fn multiple_source_roots_reserve_same_name_targets_without_overwriting() {
+        let temp = TempDir::new().unwrap();
+        let target = temp.path().join("target");
+        let sources = [temp.path().join("one"), temp.path().join("two")];
+        fs::create_dir_all(&target).unwrap();
+        for (index, source) in sources.iter().enumerate() {
+            fs::create_dir_all(source).unwrap();
+            fs::write(source.join("same.pdf"), format!("file {index}")).unwrap();
+        }
+        for conflict in [Conflict::Skip, Conflict::RenameWithNumber] {
+            let mut project = project(&sources[0], &target, Destination::Root, conflict);
+            project
+                .source
+                .roots
+                .push(sources[1].to_string_lossy().into_owned());
+            let id = project.id.clone();
+            let plan = create_plan(&state(project), &[id]).unwrap();
+            if matches!(conflict, Conflict::Skip) {
+                assert_eq!(plan.public.movable, 1);
+                assert_eq!(plan.public.skipped, 1);
+                assert_eq!(
+                    plan.items[1].public.reason_code.as_deref(),
+                    Some("TARGET_EXISTS")
+                );
+            } else {
+                assert_eq!(plan.public.movable, 2);
+                assert_ne!(plan.items[0].target, plan.items[1].target);
+            }
+        }
+    }
+
+    #[test]
+    fn every_source_root_is_checked_for_missing_folders_and_overlaps() {
+        let temp = TempDir::new().unwrap();
+        let source = temp.path().join("source");
+        let target = temp.path().join("target");
+        let other = temp.path().join("other");
+        for folder in [&source, &target, &other, &source.join("nested")] {
+            fs::create_dir_all(folder).unwrap();
+        }
+        for extra in [
+            source.clone(),
+            source.join("nested"),
+            target.clone(),
+            temp.path().join("missing"),
+        ] {
+            let mut project = project(&source, &target, Destination::Root, Conflict::Skip);
+            project
+                .source
+                .roots
+                .push(extra.to_string_lossy().into_owned());
+            let id = project.id.clone();
+            assert!(create_plan(&state(project), &[id]).is_err());
+        }
+        let mut first = project(&source, &target, Destination::Root, Conflict::Skip);
+        first
+            .source
+            .roots
+            .push(other.to_string_lossy().into_owned());
+        for (second_source, second_target) in [(&other, &target), (&target, &other)] {
+            let second = project(
+                second_source,
+                second_target,
+                Destination::Root,
+                Conflict::Skip,
+            );
+            let ids = [first.id.clone(), second.id.clone()];
+            let mut settings = state(first.clone());
+            settings.projects.push(second);
+            assert!(create_plan(&settings, &ids).is_err());
+        }
+        first.source.roots.clear();
+        let id = first.id.clone();
+        assert!(create_plan(&state(first), &[id]).is_err());
     }
 
     #[test]

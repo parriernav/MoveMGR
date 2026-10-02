@@ -14,7 +14,7 @@
       "name": "Client document sorting",
       "checked": true,
       "source": {
-        "root": "C:/Users/Example/Downloads/Documents",
+        "roots": ["C:/Users/Example/Downloads/Documents", "C:/Users/Example/Desktop/Documents"],
         "recursive": false,
         "includeHidden": false,
         "extensions": {

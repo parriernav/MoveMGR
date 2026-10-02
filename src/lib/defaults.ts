@@ -6,7 +6,7 @@ export const newProject = (language: Language = 'ko'): Project => ({
   name: translate(language, 'newProject'),
   checked: false,
   source: {
-    root: '',
+    roots: [],
     recursive: false,
     includeHidden: false,
     moveUnit: 'file',
