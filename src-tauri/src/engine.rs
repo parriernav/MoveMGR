@@ -44,7 +44,7 @@ fn display_path(path: &Path) -> String {
 }
 
 fn normalized_path_key(path: &Path) -> String {
-    let value = path.to_string_lossy().replace('\\', "/");
+    let value = display_path(path).replace('\\', "/");
     if cfg!(windows) || cfg!(target_os = "macos") {
         value.to_lowercase()
     } else {
@@ -71,6 +71,8 @@ fn reason(code: &str) -> String {
         "INVALID_TARGET_NAME" => "분류값을 폴더 이름으로 사용할 수 없습니다.",
         "TARGET_EXISTS" => "같은 이름의 파일이 있습니다.",
         "TARGET_FOLDER_MISSING" => "목적지 하위 폴더가 없습니다.",
+        "HIGHER_PRIORITY_PROJECT" => "상위 프로젝트에서 처리 예정인 파일입니다.",
+        "SAME_SOURCE_TARGET" => "파일이 이미 목적지에 있습니다.",
         _ => "파일을 처리할 수 없습니다.",
     }
     .into()
@@ -263,16 +265,17 @@ fn unique_target(
 }
 
 pub fn create_plan(state: &LocalState, project_ids: &[String]) -> Result<InternalPlan, String> {
-    let selected: Vec<&Project> = project_ids
+    for id in project_ids {
+        if !state.projects.iter().any(|project| &project.id == id) {
+            return Err(format!("프로젝트를 찾을 수 없습니다: {id}"));
+        }
+    }
+    // The saved list order determines priority, regardless of request ID order.
+    let selected: Vec<&Project> = state
+        .projects
         .iter()
-        .map(|id| {
-            state
-                .projects
-                .iter()
-                .find(|project| &project.id == id)
-                .ok_or_else(|| format!("프로젝트를 찾을 수 없습니다: {id}"))
-        })
-        .collect::<Result<_, _>>()?;
+        .filter(|project| project_ids.contains(&project.id))
+        .collect();
     if selected.is_empty() {
         return Err("실행할 프로젝트가 없습니다.".into());
     }
@@ -293,16 +296,13 @@ pub fn create_plan(state: &LocalState, project_ids: &[String]) -> Result<Interna
         }
     }
 
-    let roots: Vec<(&Project, Vec<PathBuf>, PathBuf)> = selected
+    let roots: Vec<(&Project, Vec<PathBuf>)> = selected
         .iter()
         .map(|project| {
-            let target = canonical_existing(Path::new(&project.target.root))?;
+            canonical_existing(Path::new(&project.target.root))?;
             let mut sources: Vec<PathBuf> = Vec::new();
             for root in &project.source.roots {
                 let source = canonical_existing(Path::new(root))?;
-                if roots_overlap(&source, &target) {
-                    return Err(format!("‘{}’의 소스와 타겟 범위가 겹칩니다.", project.name));
-                }
                 if sources
                     .iter()
                     .any(|previous| roots_overlap(previous, &source))
@@ -311,39 +311,14 @@ pub fn create_plan(state: &LocalState, project_ids: &[String]) -> Result<Interna
                 }
                 sources.push(source);
             }
-            Ok((*project, sources, target))
+            Ok((*project, sources))
         })
         .collect::<Result<_, String>>()?;
 
-    for i in 0..roots.len() {
-        for j in (i + 1)..roots.len() {
-            if roots[i]
-                .1
-                .iter()
-                .any(|a| roots[j].1.iter().any(|b| roots_overlap(a, b)))
-            {
-                return Err(format!(
-                    "‘{}’와 ‘{}’의 소스 범위가 겹칩니다.",
-                    roots[i].0.name, roots[j].0.name
-                ));
-            }
-            if roots[j]
-                .1
-                .iter()
-                .any(|source| roots_overlap(&roots[i].2, source))
-                || roots[i]
-                    .1
-                    .iter()
-                    .any(|source| roots_overlap(&roots[j].2, source))
-            {
-                return Err("한 프로젝트의 타겟이 다른 프로젝트의 소스와 겹칩니다.".into());
-            }
-        }
-    }
-
     let mut reserved = HashSet::new();
+    let mut claimed_sources = HashSet::new();
     let mut items = vec![];
-    for (project, source_roots, _) in roots {
+    for (project, source_roots) in roots {
         // Each candidate-folder group rotates independently within this project's plan.
         let mut round_robin_counts = HashMap::new();
         let mut group_destinations: HashMap<(PathBuf, String), PathBuf> = HashMap::new();
@@ -392,6 +367,19 @@ pub fn create_plan(state: &LocalState, project_ids: &[String]) -> Result<Interna
             };
             let len = metadata.len();
             let modified = modified_nanos(&metadata);
+            let source_key = normalized_path_key(&source);
+            if claimed_sources.contains(&source_key) {
+                add_skipped(
+                    &mut items,
+                    project,
+                    &source,
+                    len,
+                    modified,
+                    None,
+                    "HIGHER_PRIORITY_PROJECT",
+                );
+                continue;
+            }
             let source_group =
                 matches!(project.source.move_unit, MoveUnit::SameNameGroup).then(|| {
                     (
@@ -428,11 +416,24 @@ pub fn create_plan(state: &LocalState, project_ids: &[String]) -> Result<Interna
                     }
                 }
             };
-            let target = match unique_target(
-                selection.directory.join(file_name),
-                project.conflict,
-                &mut reserved,
-            ) {
+            let destination = selection.directory.join(file_name);
+            if destination
+                .canonicalize()
+                .map(|path| normalized_path_key(&path) == source_key)
+                .unwrap_or(false)
+            {
+                add_skipped(
+                    &mut items,
+                    project,
+                    &source,
+                    len,
+                    modified,
+                    key,
+                    "SAME_SOURCE_TARGET",
+                );
+                continue;
+            }
+            let target = match unique_target(destination, project.conflict, &mut reserved) {
                 Ok(value) => value,
                 Err(code) => {
                     add_skipped(&mut items, project, &source, len, modified, key, &code);
@@ -449,6 +450,8 @@ pub fn create_plan(state: &LocalState, project_ids: &[String]) -> Result<Interna
                     .entry(group)
                     .or_insert(selection.directory);
             }
+            // A skipped rule leaves the source available to lower-priority projects.
+            claimed_sources.insert(source_key);
             let public = PlannedItem {
                 item_id: Uuid::new_v4().to_string(),
                 project_id: project.id.clone(),
@@ -776,6 +779,10 @@ mod tests {
     #[test]
     fn display_paths_hide_windows_verbatim_prefixes() {
         assert_eq!(
+            normalized_path_key(Path::new(r"\\?\E:\ai_pixel\image.png")),
+            normalized_path_key(Path::new(r"E:\ai_pixel\image.png"))
+        );
+        assert_eq!(
             display_path(Path::new(r"\\?\E:\ai_pixel\image.png")),
             r"E:\ai_pixel\image.png"
         );
@@ -963,7 +970,7 @@ mod tests {
     }
 
     #[test]
-    fn every_source_root_is_checked_for_missing_folders_and_overlaps() {
+    fn source_roots_require_existing_nonoverlapping_folders_within_each_project() {
         let temp = TempDir::new().unwrap();
         let source = temp.path().join("source");
         let target = temp.path().join("target");
@@ -974,7 +981,6 @@ mod tests {
         for extra in [
             source.clone(),
             source.join("nested"),
-            target.clone(),
             temp.path().join("missing"),
         ] {
             let mut project = project(&source, &target, Destination::Root, Conflict::Skip);
@@ -1000,11 +1006,194 @@ mod tests {
             let ids = [first.id.clone(), second.id.clone()];
             let mut settings = state(first.clone());
             settings.projects.push(second);
-            assert!(create_plan(&settings, &ids).is_err());
+            assert!(create_plan(&settings, &ids).is_ok());
         }
         first.source.roots.clear();
         let id = first.id.clone();
         assert!(create_plan(&state(first), &[id]).is_err());
+    }
+
+    #[test]
+    fn overlapping_projects_use_list_priority_and_scan_deep_subfolders() {
+        let temp = TempDir::new().unwrap();
+        let source = temp.path().join("source");
+        let nested = source.join("생성/비디픽스타일/batch/완성본");
+        let upper_target = temp.path().join("upper");
+        let lower_target = temp.path().join("lower");
+        for folder in [&nested, &upper_target, &lower_target] {
+            fs::create_dir_all(folder).unwrap();
+        }
+        for (name, contents) in [
+            ("clip.mp4", "video"),
+            ("clip.txt", "caption"),
+            ("other.mp4", "other"),
+        ] {
+            fs::write(nested.join(name), contents).unwrap();
+        }
+        let mut upper = project(&source, &upper_target, Destination::Root, Conflict::Skip);
+        upper.source.recursive = true;
+        upper.source.extensions = ExtensionFilter::Only {
+            values: vec!["mp4".into()],
+            include_extensionless: false,
+        };
+        upper.source.name_filters.push(NameFilter {
+            op: NameFilterOp::StartsWith,
+            value: "clip".into(),
+        });
+        let mut lower = project(
+            &source.join("생성"),
+            &lower_target,
+            Destination::Root,
+            Conflict::Skip,
+        );
+        lower.source.recursive = true;
+        lower.source.extensions = ExtensionFilter::All;
+        let upper_id = upper.id.clone();
+        let lower_id = lower.id.clone();
+        // Reversed and repeated request IDs cannot change the list's priority.
+        let ids = [lower_id.clone(), upper_id.clone(), upper_id.clone()];
+        let mut settings = state(upper);
+        settings.projects.push(lower);
+        let plan = create_plan(&settings, &ids).unwrap();
+        assert_eq!(plan.public.movable, 3);
+        assert_eq!(plan.public.skipped, 1);
+        assert_eq!(plan.items[0].public.project_id, upper_id);
+        let duplicate = plan
+            .items
+            .iter()
+            .find(|item| item.public.project_id == lower_id && item.source.ends_with("clip.mp4"))
+            .unwrap();
+        assert_eq!(
+            duplicate.public.reason_code.as_deref(),
+            Some("HIGHER_PRIORITY_PROJECT")
+        );
+        assert!(duplicate.target.is_none());
+        assert!(nested.join("clip.mp4").exists());
+        // Reordering projects transfers all three files to the new first project.
+        settings.projects.swap(0, 1);
+        let reordered = create_plan(&settings, &ids).unwrap();
+        assert_eq!(reordered.public.movable, 3);
+        assert!(reordered
+            .items
+            .iter()
+            .filter(|item| item.public.decision == "move")
+            .all(|item| item.public.project_id == lower_id));
+        let result =
+            execute_plan(plan, &temp.path().join("runs"), &AtomicBool::new(false)).unwrap();
+        assert_eq!((result.moved, result.skipped, result.failed), (3, 1, 0));
+        assert_eq!(fs::read(upper_target.join("clip.mp4")).unwrap(), b"video");
+        assert_eq!(fs::read(lower_target.join("clip.txt")).unwrap(), b"caption");
+        assert_eq!(fs::read(lower_target.join("other.mp4")).unwrap(), b"other");
+        assert!(!lower_target.join("clip.mp4").exists());
+        assert_eq!(fs::read_dir(&nested).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn skipped_upper_targets_leave_files_available_to_lower_projects() {
+        for missing_match in [true, false] {
+            let temp = TempDir::new().unwrap();
+            let source = temp.path().join("source");
+            let upper_target = temp.path().join("upper");
+            let lower_target = temp.path().join("lower");
+            for folder in [&source, &upper_target, &lower_target] {
+                fs::create_dir_all(folder).unwrap();
+            }
+            fs::write(source.join("client_doc.pdf"), b"new").unwrap();
+            let destination = if missing_match {
+                matching_destination(MultipleMatchPolicy::First)
+            } else {
+                fs::write(upper_target.join("client_doc.pdf"), b"old").unwrap();
+                Destination::Root
+            };
+            let upper = project(&source, &upper_target, destination, Conflict::Skip);
+            let lower = project(&source, &lower_target, Destination::Root, Conflict::Skip);
+            let ids = [upper.id.clone(), lower.id.clone()];
+            let mut settings = state(upper);
+            settings.projects.push(lower);
+            let plan = create_plan(&settings, &ids).unwrap();
+            assert_eq!(plan.public.movable, 1);
+            assert_eq!(
+                plan.items[0].public.reason_code.as_deref(),
+                Some(if missing_match {
+                    "NO_TARGET_MATCH"
+                } else {
+                    "TARGET_EXISTS"
+                })
+            );
+            assert_eq!(plan.items[1].public.decision, "move");
+            let result =
+                execute_plan(plan, &temp.path().join("runs"), &AtomicBool::new(false)).unwrap();
+            assert_eq!((result.moved, result.skipped, result.failed), (1, 1, 0));
+            assert_eq!(
+                fs::read(lower_target.join("client_doc.pdf")).unwrap(),
+                b"new"
+            );
+            if !missing_match {
+                assert_eq!(
+                    fs::read(upper_target.join("client_doc.pdf")).unwrap(),
+                    b"old"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn same_root_can_sort_files_but_skips_files_already_at_the_destination() {
+        let temp = TempDir::new().unwrap();
+        let source = temp.path().join("source");
+        let completed = source.join("completed");
+        fs::create_dir_all(&completed).unwrap();
+        fs::write(source.join("clip.pdf"), b"new").unwrap();
+        fs::write(completed.join("clip.pdf"), b"old").unwrap();
+        let mut project = project(
+            &source,
+            &source,
+            Destination::FixedSubfolder {
+                relative_path: "completed".into(),
+                create_if_missing: true,
+            },
+            Conflict::RenameWithNumber,
+        );
+        project.source.recursive = true;
+        let id = project.id.clone();
+        let plan = create_plan(&state(project), &[id]).unwrap();
+        assert_eq!((plan.public.movable, plan.public.skipped), (1, 1));
+        assert!(plan
+            .items
+            .iter()
+            .any(|item| item.public.reason_code.as_deref() == Some("SAME_SOURCE_TARGET")));
+        let result =
+            execute_plan(plan, &temp.path().join("runs"), &AtomicBool::new(false)).unwrap();
+        assert_eq!((result.moved, result.skipped, result.failed), (1, 1, 0));
+        assert_eq!(fs::read(completed.join("clip.pdf")).unwrap(), b"old");
+        assert_eq!(fs::read(completed.join("clip (1).pdf")).unwrap(), b"new");
+        assert_eq!(fs::read_dir(&completed).unwrap().count(), 2);
+    }
+
+    #[test]
+    fn overlapping_targets_and_sources_only_process_previewed_original_files() {
+        let temp = TempDir::new().unwrap();
+        let source = temp.path().join("source");
+        let staging = temp.path().join("staging");
+        let target = temp.path().join("target");
+        for folder in [&source, &staging, &target] {
+            fs::create_dir_all(folder).unwrap();
+        }
+        fs::write(source.join("upper.pdf"), b"upper").unwrap();
+        fs::write(staging.join("lower.pdf"), b"lower").unwrap();
+        let upper = project(&source, &staging, Destination::Root, Conflict::Skip);
+        let lower = project(&staging, &target, Destination::Root, Conflict::Skip);
+        let ids = [upper.id.clone(), lower.id.clone()];
+        let mut settings = state(upper);
+        settings.projects.push(lower);
+        let plan = create_plan(&settings, &ids).unwrap();
+        assert_eq!(plan.public.movable, 2);
+        let result =
+            execute_plan(plan, &temp.path().join("runs"), &AtomicBool::new(false)).unwrap();
+        assert_eq!((result.moved, result.failed), (2, 0));
+        assert_eq!(fs::read(staging.join("upper.pdf")).unwrap(), b"upper");
+        assert_eq!(fs::read(target.join("lower.pdf")).unwrap(), b"lower");
+        assert!(!target.join("upper.pdf").exists());
     }
 
     #[test]

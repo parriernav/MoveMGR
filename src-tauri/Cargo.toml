@@ -1,6 +1,6 @@
 [package]
 name = "movemgr"
-version = "0.0.28"
+version = "0.0.29"
 description = "Rule-based file organizer"
 authors = ["MoveMgr"]
 edition = "2021"

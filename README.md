@@ -11,6 +11,8 @@ MoveMgr is a local desktop app for organizing files from multiple source folders
 
 - Create, duplicate, delete, reorder, and select multiple projects.
 - Filter source files by extension, filename, subfolder recursion, and hidden-file status.
+- Run overlapping projects in list order: the first project able to move a file takes priority, and lower projects report a skip. Files skipped by an earlier rule remain available to later projects.
+- Sort within the same source and target root; files already at their destination are skipped. Each run processes the original files captured in its preview.
 - Keep files with the same extensionless name together and distribute whole filename groups across matching folders.
 - Extract classification keys from whole names, prefixes, or delimiter-separated names.
 - Move files to the target root, a fixed subfolder, an existing matching folder, or a key-named folder.

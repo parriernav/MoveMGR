@@ -4,6 +4,8 @@ export type Language = Preferences['language'];
 export type MessageVariables = Record<string, string | number>;
 
 const en = {
+  priorityHint: 'When a file matches multiple projects, the first project that can move it takes priority; lower projects skip it.',
+  reasonHigherPriorityProject: 'Scheduled in a higher-priority project.', reasonSameSourceTarget: 'The file is already at its destination.',
   addSourceFolders: 'Add source folders', removeSourceFolder: 'Remove source folder: {path}', sourceFolderRemoved: 'Source folder removed from the project.',
   projectName: 'Project name', sourceFolder: 'Source folder', targetFolder: 'Target folder', extensions: 'Extensions',
   filenameCondition: 'Filename condition', keyLength: 'Key length', keyDelimiter: 'Key delimiter', targetSubfolder: 'Target subfolder',
@@ -86,6 +88,8 @@ export type MessageKey = keyof typeof en;
 
 const ko: Record<MessageKey, string> = {
   ...en,
+  priorityHint: '같은 파일이 여러 프로젝트의 조건을 만족하면 이동 가능한 위 프로젝트를 우선하고 아래 프로젝트는 건너뜁니다.',
+  reasonHigherPriorityProject: '상위 프로젝트에서 처리 예정인 파일입니다.', reasonSameSourceTarget: '파일이 이미 목적지에 있습니다.',
   addSourceFolders: '소스 폴더 추가', removeSourceFolder: '소스 폴더 등록 해제: {path}', sourceFolderRemoved: '프로젝트에서 소스 폴더 등록을 해제했습니다.',
   moveUnit: '이동 단위', moveByFile: '파일 단위', moveByNameGroup: '같은 파일명 묶음 단위',
   moveUnitHelp: '같은 소스 폴더의 clip.mp4, clip.txt, clip.png처럼 확장자를 제외한 이름으로 묶습니다. 소스 조건을 통과한 파일은 같은 목적지로 이동하고, 균등 배분 차례는 묶음마다 한 번만 넘어갑니다. 타겟의 대소문자 무시 설정도 적용됩니다.',
@@ -104,6 +108,8 @@ const ko: Record<MessageKey, string> = {
 
 const ja: Record<MessageKey, string> = {
   ...en,
+  priorityHint: '同じファイルが複数のプロジェクトに一致する場合、移動可能な上のプロジェクトを優先し、下のプロジェクトはスキップします。',
+  reasonHigherPriorityProject: '上位のプロジェクトで処理予定です。', reasonSameSourceTarget: 'ファイルはすでに移動先にあります。',
   addSourceFolders: 'ソースフォルダーを追加', removeSourceFolder: 'ソースフォルダーの登録を解除: {path}', sourceFolderRemoved: 'プロジェクトからソースフォルダーの登録を解除しました。',
   moveUnit: '移動単位', moveByFile: 'ファイル単位', moveByNameGroup: '同じ名前のファイルをまとめる',
   moveUnitHelp: '同じソースフォルダーの clip.mp4、clip.txt、clip.png のように、拡張子を除いた名前でまとめます。ソース条件に一致したファイルは同じ保存先へ移動し、均等な振り分けの順番はグループごとに一度だけ進みます。ターゲットの大文字と小文字を無視する設定も適用されます。',
@@ -121,6 +127,8 @@ const ja: Record<MessageKey, string> = {
 
 const zh: Record<MessageKey, string> = {
   ...en,
+  priorityHint: '同一文件符合多个项目时，优先由上方可移动该文件的项目处理，下方项目跳过。',
+  reasonHigherPriorityProject: '该文件已由上方项目安排处理。', reasonSameSourceTarget: '文件已位于目标位置。',
   addSourceFolders: '添加源文件夹', removeSourceFolder: '移除源文件夹: {path}', sourceFolderRemoved: '已从项目中移除源文件夹。',
   moveUnit: '移动单位', moveByFile: '单个文件', moveByNameGroup: '按相同文件名分组',
   moveUnitHelp: '将同一源文件夹中的 clip.mp4、clip.txt、clip.png 等按不含扩展名的名称分组。满足源条件的文件移动到同一位置，轮流分配时每组只占一个轮次。分组也使用目标的忽略大小写设置。',
@@ -157,6 +165,7 @@ export const localeForLanguage: Record<Language, string> = {
 };
 
 export const reasonMessageKeys: Record<string, MessageKey> = {
+  HIGHER_PRIORITY_PROJECT: 'reasonHigherPriorityProject', SAME_SOURCE_TARGET: 'reasonSameSourceTarget',
   KEY_TOO_SHORT: 'reasonKeyTooShort', DELIMITER_MISSING: 'reasonDelimiterMissing', EMPTY_KEY: 'reasonEmptyKey',
   NO_TARGET_MATCH: 'reasonNoTarget', AMBIGUOUS_TARGET: 'reasonAmbiguousTarget', INVALID_TARGET_NAME: 'reasonInvalidTarget',
   TARGET_EXISTS: 'reasonTargetExists', TARGET_FOLDER_MISSING: 'reasonTargetFolderMissing'

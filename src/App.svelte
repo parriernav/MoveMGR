@@ -581,7 +581,7 @@
           {/each}
       </section>
 
-      <p class="selection-hint">{t('selectionHint')}</p>
+      <p class="selection-hint">{t('selectionHint')} {t('priorityHint')}</p>
       <footer class="statusbar"><span>{busy ? t('working') : saved ? t('settingsSaved') : t('saving')}</span><span>{state.preferences.previewBeforeRun ? t('previewOn') : t('quickRunOn')} · {t('rememberChecks')}</span></footer>
       {#if message}<div class="toast success" role="status">{message}</div>{/if}
       {#if error}<div class="toast error" role="alert">{error}<button aria-label={t('closeError')} onclick={() => (error = '')}>×</button></div>{/if}
@@ -658,7 +658,7 @@
     <header class="modal-header"><div><span class="eyebrow">MOVE PREVIEW</span><h2 id="plan-title">{runResult ? t('moveResult') : t('reviewBeforeMove')}</h2></div><button class="close" aria-label={t('close')} onclick={() => (dialog = null)}>×</button></header>
     {#if runResult}
       <div class="metrics"><div><strong>{runResult.moved}</strong><span>{t('moved')}</span></div><div><strong>{runResult.skipped}</strong><span>{t('skipped')}</span></div><div><strong>{runResult.failed}</strong><span>{t('failed')}</span></div><div><strong>{runResult.sourceRetained}</strong><span>{t('sourceRetained')}</span></div></div>
-      <div class="table-scroll"><table><thead><tr><th>{t('project')}</th><th>{t('original')}</th><th>{t('finalLocation')}</th><th>{t('status')}</th></tr></thead><tbody>{#each runResult.items as item}<tr><td>{item.projectName}</td><td>{item.sourcePath}</td><td>{item.finalTargetPath ?? '—'}</td><td>{item.state}{#if item.message}<small>{item.message}</small>{/if}</td></tr>{/each}</tbody></table></div>
+      <div class="table-scroll"><table><thead><tr><th>{t('project')}</th><th>{t('original')}</th><th>{t('finalLocation')}</th><th>{t('status')}</th></tr></thead><tbody>{#each runResult.items as item}<tr><td>{item.projectName}</td><td>{item.sourcePath}</td><td>{item.finalTargetPath ?? '—'}</td><td>{item.state}{#if item.message}<small>{item.message}</small>{:else if item.reasonCode}<small>{reasonText(item.reasonCode, item.reasonText)}</small>{/if}</td></tr>{/each}</tbody></table></div>
     {:else if plan}
       <div class="metrics"><div><strong>{plan.movable}</strong><span>{t('scheduled')}</span></div><div><strong>{plan.skipped}</strong><span>{t('skipped')}</span></div><div><strong>{plan.blocked}</strong><span>{t('blocked')}</span></div></div>
       <div class="table-scroll"><table class="preview-table"><thead><tr>
