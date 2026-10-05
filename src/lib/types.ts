@@ -12,7 +12,7 @@ export type NameFilter = {
   value: string;
 };
 
-export type MultipleMatchPolicy = 'first' | 'roundRobin' | 'skip';
+export type MultipleMatchPolicy = 'first' | 'roundRobin' | 'leastFilled' | 'skip';
 
 export type MoveUnit = 'file' | 'sameNameGroup';
 

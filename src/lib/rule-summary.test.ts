@@ -26,6 +26,7 @@ describe('target rule summary', () => {
   it.each([
     ['first', '첫 번째 폴더에 모으기'],
     ['roundRobin', '순서대로 균등 배분'],
+    ['leastFilled', '적은 쪽부터 균등 배분'],
     ['skip', '건너뛰기']
   ] as const)('shows the %s policy in the project summary', (multipleMatches, label) => {
     const project = newProject();

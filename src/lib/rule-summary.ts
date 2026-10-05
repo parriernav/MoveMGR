@@ -43,7 +43,8 @@ export function targetSummaryLines(project: Project, language: Language = 'ko'):
     translate(language, 'summaryMultipleMatches', {
       policy: translate(language, destination.multipleMatches === 'skip'
         ? 'multipleMatchesSkip'
-        : destination.multipleMatches === 'roundRobin' ? 'multipleMatchesRoundRobin' : 'multipleMatchesFirst')
+        : destination.multipleMatches === 'roundRobin' ? 'multipleMatchesRoundRobin'
+        : destination.multipleMatches === 'leastFilled' ? 'multipleMatchesLeastFilled' : 'multipleMatchesFirst')
     }),
     translate(language, 'summaryNoMatch', { action: translate(language, destination.noMatch === 'skip' ? 'summarySkip' : 'createKeyFolder'), conflict })
   ];

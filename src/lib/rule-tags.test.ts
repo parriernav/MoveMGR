@@ -38,16 +38,16 @@ describe('rule tags', () => {
     expect(project.source.moveUnit).toBe('file');
   });
 
-  it('snapshots target rules independently of later edits', () => {
+  it.each(['roundRobin', 'leastFilled'] as const)('preserves the %s target policy independently of later edits', (multipleMatches) => {
     const project = newProject();
-    project.target.destination = { mode: 'matchSubfolder', searchBase: '', folderExtractor: { kind: 'whole' }, comparison: { kind: 'equals' }, noMatch: 'skip', multipleMatches: 'roundRobin' };
+    project.target.destination = { mode: 'matchSubfolder', searchBase: '', folderExtractor: { kind: 'whole' }, comparison: { kind: 'equals' }, noMatch: 'skip', multipleMatches };
     const saved = snapshotRules(project, 'target');
     project.target.destination = { mode: 'root' };
     expect(saved.destination.mode).toBe('matchSubfolder');
     const applied = applyRuleTag(project, { id: crypto.randomUUID(), name: '균등 배분', kind: 'target', rules: saved });
     expect(applied.target.destination).toEqual(saved.destination);
     if (applied.target.destination.mode === 'matchSubfolder') {
-      expect(applied.target.destination.multipleMatches).toBe('roundRobin');
+      expect(applied.target.destination.multipleMatches).toBe(multipleMatches);
     }
   });
 });

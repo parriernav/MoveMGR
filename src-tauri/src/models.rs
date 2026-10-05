@@ -98,6 +98,7 @@ pub enum MultipleMatchPolicy {
     #[default]
     First,
     RoundRobin,
+    LeastFilled,
     Skip,
 }
 
@@ -437,7 +438,7 @@ mod tests {
             serde_json::to_value(rule).unwrap()["multipleMatches"],
             "first"
         );
-        for policy in ["skip", "first", "roundRobin"] {
+        for policy in ["skip", "first", "roundRobin", "leastFilled"] {
             let mut current = old.clone();
             current["multipleMatches"] = json!(policy);
             let rule: Destination = serde_json::from_value(current.clone()).unwrap();
